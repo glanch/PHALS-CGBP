@@ -4,6 +4,7 @@
 #include <iostream>
 #include <sstream>
 #include <vector>
+#include <map>
 
 using namespace std;
 
@@ -12,11 +13,12 @@ using OurTime = int;
 using Coil = int;
 using ProductionLine = int;
 using Mode = int;
-using StringerNeeded = int;
+using StringerNeeded = bool;
 using DueDate = OurTime;
-using MachiningTime = OurTime;
+using ProcessingTime = OurTime;
 using SetupTime = OurTime;
 
+using std::tuple, std::map, std::pair;
 class Instance
 {
 public:
@@ -24,9 +26,13 @@ public:
    int numberOfProductionLines;
 
    int maximumDelayedCoils;
-   map<Coil, DueDate> dueDate;
 
-   map<pair<Coil, ProductionLine>, vector<Mode>> modes;
+   vector<ProductionLine> productionLines;
+   vector<Coil> coils;
+
+   map<Coil, DueDate> dueDates;
+
+   std::map<tuple<Coil, ProductionLine>, vector<Mode>> modes;
    map<tuple<Coil, ProductionLine, Mode>, ProcessingTime> processingTimes;
    map<tuple<Coil, Mode, Coil, Mode, ProductionLine>, SetupTime> setupTimes;
    map<tuple<Coil, Mode, Coil, Mode, ProductionLine>, StringerNeeded> stringerNeeded;
