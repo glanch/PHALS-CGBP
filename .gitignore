@@ -1,0 +1,12 @@
+html/
+latex/
+Doxyfile*
+.cache/
+build/
+*.o
+exe
+*.lp
+*.vbc
+.vscode
+.direnv
+
