@@ -27,6 +27,8 @@ public:
 
    int maximumDelayedCoils;
 
+   vector<string> comments;
+
    vector<ProductionLine> productionLines;
    vector<Coil> coils;
 
@@ -38,5 +40,7 @@ public:
    map<tuple<Coil, Mode, Coil, Mode, ProductionLine>, StringerNeeded> stringerNeeded;
 
    void read(string nameFile); // function to read data from a file
+   void readPhals(string nameFile); // function to read data from a phals file
+
    void display(); // function to display the data
 };
