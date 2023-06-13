@@ -25,7 +25,7 @@ CompactModel::CompactModel(shared_ptr<Instance> instance) : instance_(instance)
    SCIPsetObjsense(scip_, SCIP_OBJSENSE_MINIMIZE);
 
    // call the created function set all optional SCIPParameters
-   setSCIPParameters();
+   this->SetSCIPParameters();
 
    // create helping-dummy for the name of variables and constraints
    char var_cons_name[Settings::kSCIPMaxStringLength];
@@ -34,142 +34,165 @@ CompactModel::CompactModel(shared_ptr<Instance> instance) : instance_(instance)
    //  Create and add all variables
    // #####################################################################################################################
 
-   for(auto& line : instance_->productionLines) {
-      for(auto& coil_i : instance_->coils) {
-         for(auto& coil_j : instance_->coils) {
-            if(i != j) {
-               for(auto& mode_i : instance_->modes[make_tuple<coil_i, line]) {
-                  for(auto& mode_j : instance_->modes[make_tuple<coil_j, line]) {
-                     // create var here
-                  }  
+   for (auto &line : instance_->productionLines)
+   {
+      for (auto &coil_i : instance_->coils)
+      {
+         // create Z variable
+         SCIP_VAR** z_var_pointer = &vars_Z_[coil_i];
+         SCIPsnprintf(var_cons_name, Settings::kSCIPMaxStringLength, this->var_Z_fmt, coil_i);
+         SCIPcreateVarBasic(scip_,                //
+                     z_var_pointer,          // returns the address of the newly created variable
+                     var_cons_name,        // name
+                     0,                    // lower bound
+                     1,                    // upper bound
+                     1,                    // objective function coefficient, this is equal to 1 according to (1)
+                     SCIP_VARTYPE_BINARY); // variable type
+         for (auto &coil_j : instance_->coils)
+         {
+            if (coil_i != coil_j)
+            {
+               for (auto &mode_i : instance_->modes[make_tuple(coil_i, line)])
+               {
+                  for (auto &mode_j : instance_->modes[make_tuple(coil_j, line)])
+                  {
+                     SCIP_VAR ** var_pointer = &vars_X_[make_tuple(coil_i, coil_j, line, mode_i, mode_j)];
+
+                     SCIPcreateVarBasic(scip_,                //
+                                        var_pointer,          // returns the address of the newly created variable
+                                        var_cons_name,        // name
+                                        0,                    // lower bound
+                                        1,                    // upper bound
+                                        1,                    // objective function coefficient, this is equal to 1 according to (1)
+                                        SCIP_VARTYPE_BINARY); // variable type
+                  }
                }
-
             }
-         }  
+         }
       }
    }
-   for( int j = 0; j < _ins->_nbBins; ++j )
-   {
-      SCIPsnprintf(var_cons_name, Settings::kSCIPMaxStringLength, "Y_%d", j); // set name for debugging
+   //    for( int j = 0; j < _ins->_nbBins; ++j )
+   //    {
+   //       SCIPsnprintf(var_cons_name, Settings::kSCIPMaxStringLength, "Y_%d", j); // set name for debugging
 
-      SCIPcreateVarBasic(scip_,              //
-                         &_var_Y[j],           // returns the address of the newly created variable
-                         var_cons_name,        // name
-                         0,                    // lower bound
-                         1,                    // upper bound
-                         1,                    // objective function coefficient, this is equal to 1 according to (1)
-                         SCIP_VARTYPE_BINARY); // variable type
+   //       SCIPcreateVarBasic(scip_,              //
+   //                          &_var_Y[j],           // returns the address of the newly created variable
+   //                          var_cons_name,        // name
+   //                          0,                    // lower bound
+   //                          1,                    // upper bound
+   //                          1,                    // objective function coefficient, this is equal to 1 according to (1)
+   //                          SCIP_VARTYPE_BINARY); // variable type
 
-      SCIPaddVar(scip_, _var_Y[j]); // add var to scip-env
-   }
+   //       SCIPaddVar(scip_, _var_Y[j]); // add var to scip-env
+   //    }
 
-   // #####################################################################################################################
-   //  binary variable X_ij
+   //    // #####################################################################################################################
+   //    //  binary variable X_ij
 
-   // set all dimensions for X_ij, with empty pointers
-   _var_X.resize(_ins->_nbItems); // first dimension of X_ij is equal to the amount of items in this instance
+   //    // set all dimensions for X_ij, with empty pointers
+   //    _var_X.resize(_ins->_nbItems); // first dimension of X_ij is equal to the amount of items in this instance
 
-   for( int i = 0; i < _ins->_nbItems; ++i )
-   {
-      _var_X[i].resize(_ins->_nbItems,
-                       nullptr); // second dimension of X_ij is equal to the amount of bins in this instance
-   }
-   // create and add the variable Y_ij to the model
-   for( int i = 0; i < _ins->_nbItems; ++i )
-   {
-      for( int j = 0; j < _ins->_nbBins; ++j )
-      {
-         SCIPsnprintf(var_cons_name, 255, "X_%d_%d", i, j); // set name
+   //    for( int i = 0; i < _ins->_nbItems; ++i )
+   //    {
+   //       _var_X[i].resize(_ins->_nbItems,
+   //                        nullptr); // second dimension of X_ij is equal to the amount of bins in this instance
+   //    }
+   //    // create and add the variable Y_ij to the model
+   //    for( int i = 0; i < _ins->_nbItems; ++i )
+   //    {
+   //       for( int j = 0; j < _ins->_nbBins; ++j )
+   //       {
+   //          SCIPsnprintf(var_cons_name, 255, "X_%d_%d", i, j); // set name
 
-         SCIPcreateVarBasic(scip_,
-                            &_var_X[i][j], // returns the address of the newly created variable
-                            var_cons_name, // name
-                            0,             // lower bound
-                            1,             // upper bound
-                            0, // objective function coefficient, this is equal to 0 because the variable does not
-                               // appear in the objective (1)
-                            SCIP_VARTYPE_BINARY); // variable type
+   //          SCIPcreateVarBasic(scip_,
+   //                             &_var_X[i][j], // returns the address of the newly created variable
+   //                             var_cons_name, // name
+   //                             0,             // lower bound
+   //                             1,             // upper bound
+   //                             0, // objective function coefficient, this is equal to 0 because the variable does not
+   //                                // appear in the objective (1)
+   //                             SCIP_VARTYPE_BINARY); // variable type
 
-         SCIPaddVar(scip_, _var_X[i][j]); // add var to scip-env
-      }
-   }
-   // #####################################################################################################################
-   //  Add restrictions
-   // #####################################################################################################################
+   //          SCIPaddVar(scip_, _var_X[i][j]); // add var to scip-env
+   //       }
+   //    }
+   //    // #####################################################################################################################
+   //    //  Add restrictions
+   //    // #####################################################################################################################
 
-   // #####################################################################################################################
-   //  restriction (2) in lecture handout: unique assignment constraints
+   //    // #####################################################################################################################
+   //    //  restriction (2) in lecture handout: unique assignment constraints
 
-   // sum(j in J, X_ij) = 1 for all i in I
-   // is equal to:
-   // 1 <= sum(j in J, X_ij) <= 1 for all i in I
+   //    // sum(j in J, X_ij) = 1 for all i in I
+   //    // is equal to:
+   //    // 1 <= sum(j in J, X_ij) <= 1 for all i in I
 
-   // set all dimension for constraint with empty pointer
+   //    // set all dimension for constraint with empty pointer
 
-   _cons_unique_assignment.resize(_ins->_nbItems, nullptr); // dimension is equal to the number of items in theinstance
+   //    _cons_unique_assignment.resize(_ins->_nbItems, nullptr); // dimension is equal to the number of items in theinstance
 
-   for( int i = 0; i < _ins->_nbItems; ++i )
-   {
-      SCIPsnprintf(var_cons_name, 255, "unique_assignment_%d", i);
+   //    for( int i = 0; i < _ins->_nbItems; ++i )
+   //    {
+   //       SCIPsnprintf(var_cons_name, 255, "unique_assignment_%d", i);
 
-      SCIPcreateConsBasicLinear(scip_,                     // scip
-                                &_cons_unique_assignment[i], // cons
-                                var_cons_name,               // name
-                                0,                           // nvar
-                                0,                           // vars
-                                0,                           // coeffs
-                                1,                           // lhs
-                                1);                          // rhs
+   //       SCIPcreateConsBasicLinear(scip_,                     // scip
+   //                                 &_cons_unique_assignment[i], // cons
+   //                                 var_cons_name,               // name
+   //                                 0,                           // nvar
+   //                                 0,                           // vars
+   //                                 0,                           // coeffs
+   //                                 1,                           // lhs
+   //                                 1);                          // rhs
 
-      for( int j = 0; j < _ins->_nbBins; ++j ) // sum over all bins j in J
-      {
-         SCIPaddCoefLinear(scip_, _cons_unique_assignment[i], _var_X[i][j], 1);
-      }
+   //       for( int j = 0; j < _ins->_nbBins; ++j ) // sum over all bins j in J
+   //       {
+   //          SCIPaddCoefLinear(scip_, _cons_unique_assignment[i], _var_X[i][j], 1);
+   //       }
 
-      SCIPaddCons(scip_, _cons_unique_assignment[i]);
-   }
+   //       SCIPaddCons(scip_, _cons_unique_assignment[i]);
+   //    }
 
-   // #####################################################################################################################
-   //  restriction (3) in lecture handout: capacity and linking constraints
+   //    // #####################################################################################################################
+   //    //  restriction (3) in lecture handout: capacity and linking constraints
 
-   // sum(i in I, w_i * X_ij) <= b * Y_j for all bins j in J
-   // is equal to:
-   // -infty <= sum(i in I, w_i * X_ij) - b * Y_j <= 0 for all bins j in J
+   //    // sum(i in I, w_i * X_ij) <= b * Y_j for all bins j in J
+   //    // is equal to:
+   //    // -infty <= sum(i in I, w_i * X_ij) - b * Y_j <= 0 for all bins j in J
 
-   // set all dimensions
-   _cons_capacity_and_linking.resize(_ins->_nbBins,
-                                     nullptr); // dimension is equal to the number of bins in this instance
+   //    // set all dimensions
+   //    _cons_capacity_and_linking.resize(_ins->_nbBins,
+   //                                      nullptr); // dimension is equal to the number of bins in this instance
 
-   for( int j = 0; j < _ins->_nbBins; ++j )
-   {
-      SCIPsnprintf(var_cons_name, 255, "capacity_and_linking_%i", j); // set constraint name for debugging
+   //    for( int j = 0; j < _ins->_nbBins; ++j )
+   //    {
+   //       SCIPsnprintf(var_cons_name, 255, "capacity_and_linking_%i", j); // set constraint name for debugging
 
-      SCIPcreateConsBasicLinear(scip_,                        // scip
-                                &_cons_capacity_and_linking[j], // cons
-                                var_cons_name,                  // name
-                                0,                              // number of variables
-                                0,                              // vars
-                                0,                              // coeffs
-                                -SCIPinfinity(scip_),         // lhs
-                                0);                             // rhs
+   //       SCIPcreateConsBasicLinear(scip_,                        // scip
+   //                                 &_cons_capacity_and_linking[j], // cons
+   //                                 var_cons_name,                  // name
+   //                                 0,                              // number of variables
+   //                                 0,                              // vars
+   //                                 0,                              // coeffs
+   //                                 -SCIPinfinity(scip_),         // lhs
+   //                                 0);                             // rhs
 
-      for( int i = 0; i < _ins->_nbItems; ++i ) // sum over all items i in I
-      {
-         SCIPaddCoefLinear(scip_,                       // scip-env
-                           _cons_capacity_and_linking[j], // constraint
-                           _var_X[i][j],                  // variable
-                           _ins->par_w[i]);               // coefficient
-      }
-      SCIPaddCoefLinear(scip_, _cons_capacity_and_linking[j], _var_Y[j], -ins->par_b);
-      SCIPaddCons(scip_, _cons_capacity_and_linking[j]); // add constraint to the scip-env
-   }
+   //       for( int i = 0; i < _ins->_nbItems; ++i ) // sum over all items i in I
+   //       {
+   //          SCIPaddCoefLinear(scip_,                       // scip-env
+   //                            _cons_capacity_and_linking[j], // constraint
+   //                            _var_X[i][j],                  // variable
+   //                            _ins->par_w[i]);               // coefficient
+   //       }
+   //       SCIPaddCoefLinear(scip_, _cons_capacity_and_linking[j], _var_Y[j], -ins->par_b);
+   //       SCIPaddCons(scip_, _cons_capacity_and_linking[j]); // add constraint to the scip-env
+   //    }
 
-   // #####################################################################################################################
-   //  Generate LP file
-   // #####################################################################################################################
+   //    // #####################################################################################################################
+   //    //  Generate LP file
+   //    // #####################################################################################################################
 
-   // Generate a file to show the LP-Program, that is build. "FALSE" = we get our specific choosen names.
-   SCIPwriteOrigProblem(scip_, "compact_model_bpp.lp", "lp", FALSE);
+   //    // Generate a file to show the LP-Program, that is build. "FALSE" = we get our specific choosen names.
+   //    SCIPwriteOrigProblem(scip_, "compact_model_bpp.lp", "lp", FALSE);
 }
 
 /**
@@ -186,51 +209,48 @@ CompactModel::CompactModel(shared_ptr<Instance> instance) : instance_(instance)
  */
 CompactModel::~CompactModel()
 {
-   // #####################################################################################################################
-   //  release constraints
-   // #####################################################################################################################
-   //  Every constraint that we have generated and stored needs to be released. Thus, use the same for-loops as for
-   //  generating the constraints to ensure that you release everyone.
-
-   // release all unique assignment constraints
-   for( int i = 0; i < _ins->_nbItems; ++i )
+   for (auto &[_, cons] : this->cons_coil_partitioning_)
    {
-      SCIPreleaseCons(scip_, &_cons_unique_assignment[i]);
+      SCIPreleaseCons(scip_, &cons);
    }
+   // for( int i = 0; i < _ins->_nbItems; ++i )
+   // {
+   //    SCIPreleaseCons(scip_, &_cons_unique_assignment[i]);
+   // }
 
-   // release all capacity and linking constraints
+   // // release all capacity and linking constraints
 
-   for( int j = 0; j < _ins->_nbBins; j++ )
-   {
+   // for( int j = 0; j < _ins->_nbBins; j++ )
+   // {
 
-      SCIPreleaseCons(scip_, &_cons_capacity_and_linking[j]);
-   }
+   //    SCIPreleaseCons(scip_, &_cons_capacity_and_linking[j]);
+   // }
 
-   // #####################################################################################################################
-   //  release all variables
-   // #####################################################################################################################
+   // // #####################################################################################################################
+   // //  release all variables
+   // // #####################################################################################################################
 
-   // release all X_ij - variables
+   // // release all X_ij - variables
 
-   for( int i = 0; i < _ins->_nbItems; ++i ) // sum over all i in I
-   {
-      for( int j = 0; j < _ins->_nbBins; ++j ) // sum over all j in J
-      {
-         SCIPreleaseVar(scip_, &_var_X[i][j]);
-      }
-   }
+   // for( int i = 0; i < _ins->_nbItems; ++i ) // sum over all i in I
+   // {
+   //    for( int j = 0; j < _ins->_nbBins; ++j ) // sum over all j in J
+   //    {
+   //       SCIPreleaseVar(scip_, &_var_X[i][j]);
+   //    }
+   // }
 
-   // release all Y_j - variables
-   for( int j = 0; j < _ins->_nbBins; ++j ) // sum over all bins j in J
-   {
-      SCIPreleaseVar(scip_, &_var_Y[j]);
-   }
+   // // release all Y_j - variables
+   // for( int j = 0; j < _ins->_nbBins; ++j ) // sum over all bins j in J
+   // {
+   //    SCIPreleaseVar(scip_, &_var_Y[j]);
+   // }
 
-   // #####################################################################################################################
-   //  release SCIP object
-   // #####################################################################################################################
-   //  At the end release the SCIP object itself
-   SCIPfree(&scip_);
+   // // #####################################################################################################################
+   // //  release SCIP object
+   // // #####################################################################################################################
+   // //  At the end release the SCIP object itself
+   // SCIPfree(&scip_);
 }
 
 /**
@@ -255,7 +275,7 @@ void CompactModel::SetSCIPParameters()
  * @note This function solves the compact model using SCIPsolve. It prints a message to the console indicating that it
  * is starting to solve the compact model.
  */
-void CompactModel::solve()
+void CompactModel::Solve()
 {
    cout << "___________________________________________________________________________________________\n";
    cout << "start Solving compact Model: \n";
@@ -269,4 +289,4 @@ void CompactModel::solve()
  * no parameters and returns nothing. It uses the SCIPprintBestSol() function from the SCIP library to print out the
  * values.
  */
-void CompactModel::displaySolution() { SCIPprintBestSol(scip_, NULL, FALSE); };
+void CompactModel::DisplaySolution() { SCIPprintBestSol(scip_, NULL, FALSE); };

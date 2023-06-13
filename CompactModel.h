@@ -8,7 +8,7 @@
 #include "objscip/objscipdefplugins.h"
 #include <memory>
 #include <map>
-using namespace std::map
+#include "Settings.h"
 using namespace scip;
 
 class CompactModel
@@ -31,15 +31,16 @@ public:
    void SetSCIPParameters();
 
 private:
+   constexpr char[] var_Z_fmt = "Z_%d";
    shared_ptr<Instance> instance_;
    SCIP* scip_;
 
    // sentinels: start and end coils
-   Coil start_coil_
+   Coil start_coil_;
    Coil end_coil_;
 
    // variables
-   map<tuple<Coil, Coil, ProductionLine, Mode, Mode>>, SCIP_VAR*> vars_X_;
+   map<tuple<Coil, Coil, ProductionLine, Mode, Mode>, SCIP_VAR*> vars_X_;
 
    map<Coil, SCIP_VAR*> vars_Z_;
 
