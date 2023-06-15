@@ -11,6 +11,11 @@ void Instance::read(string nameFile)
 
    while (getline(infile, line))
    {
+      // if this line is empty, skip it
+      if(line.length() == 0){
+         continue;
+      }
+
       istringstream ss(line);
 
       char par_name;
@@ -35,7 +40,16 @@ void Instance::read(string nameFile)
 
          this->coils.resize(this->numberOfCoils);
          std::iota(std::begin(this->coils), std::end(this->coils), 0); // coils are indexed by 0,...,I-1
+         this->startCoil = -1;                                         //this->numberOfCoils;
+         this->endCoil = this->numberOfCoils;                          // + 1;
+
          break;
+      }
+      case 'M':
+      {
+         ss >> this->numberOfModes;
+         this->allModes.resize(this->numberOfModes);
+         std::iota(std::begin(this->allModes), std::end(this->allModes), 0); // coils are indexed by 0,...,I-1
       }
 
       case 'K': // read number of production lines
@@ -65,9 +79,9 @@ void Instance::read(string nameFile)
          ss >> coil;
          ss >> line;
          ss >> mode;
-         ss >> modeEnabled; 
+         ss >> modeEnabled;
 
-         if(modeEnabled)
+         if (modeEnabled)
             this->modes[make_tuple(coil, line)].push_back(mode);
 
          break;
@@ -115,6 +129,8 @@ void Instance::read(string nameFile)
          ss >> time;
 
          this->setupTimes[make_tuple(coil1, mode1, coil2, mode2, line)] = time;
+
+         break;
       }
       case 'c': // read stringer infos
       {
@@ -123,20 +139,38 @@ void Instance::read(string nameFile)
          Coil coil2;
          Mode mode2;
          ProductionLine line;
-         StringerNeeded stringerNeeded;
+         StringerNeeded stringerNeeded = true;
+         StringerCosts stringerCosts;
 
          ss >> coil1;
          ss >> coil2;
          ss >> line;
          ss >> mode1;
          ss >> mode2;
-         ss >> stringerNeeded;
+         ss >> stringerCosts;
 
-         this->stringerNeeded[make_tuple(coil1, mode1, coil2, mode2, line)] = stringerNeeded;
+         auto tuple = make_tuple(coil1, mode1, coil2, mode2, line);
+
+         this->stringerNeeded[tuple] = stringerNeeded;
+         this->stringerCosts[tuple] = stringerCosts;
+
+         break;
       }
          // if no of the key-chars is at the beginning, ignore the whole line and do nothing
       }
    }
+
+   // initialize mode index sets for start and end coil: both can be produced on every line with every mode
+   for (auto &line : this->productionLines)
+   {
+      modes[make_tuple(this->startCoil, line)] = {0}; //this->allModes;
+      modes[make_tuple(this->endCoil, line)] = {0}; //this->allModes;
+   }
+
+   // add both to coils
+   this->coils.push_back(this->startCoil);
+   this->coils.push_back(this->endCoil);
+
    infile.close();
 }
 
@@ -192,7 +226,7 @@ void Instance::readPhals(string nameFile)
          ss >> line;
          ss >> numberOfModes;
 
-         this->modes[make_tuple(coil, line)] = vector<Mode>(numberOfModes);
+         // this->modes[make_tuple(coil, line)] = vector<Mode>(numberOfModes);
 
          std::iota(std::begin(
                        this->modes[make_tuple(coil, line)]),
@@ -250,16 +284,19 @@ void Instance::readPhals(string nameFile)
          Coil coil2;
          Mode mode2;
          ProductionLine line;
-         StringerNeeded stringerNeeded;
+         StringerNeeded stringerNeeded = true;
+         StringerCosts stringerCosts;
 
          ss >> coil1;
          ss >> mode1;
          ss >> coil2;
          ss >> mode2;
          ss >> line;
-         ss >> stringerNeeded;
+         ss >> stringerCosts;
 
-         this->stringerNeeded[make_tuple(coil1, mode1, coil2, mode2, line)] = stringerNeeded;
+         auto tuple = make_tuple(coil1, mode1, coil2, mode2, line);
+         this->stringerNeeded[tuple] = stringerNeeded;
+         this->stringerCosts[tuple] = stringerCosts;
       }
          // if no of the key-chars is at the beginning, ignore the whole line and do nothing
       }
@@ -270,7 +307,8 @@ void Instance::readPhals(string nameFile)
 void Instance::display()
 {
    cout << "Instance " << endl;
-   for(auto& comment : this->comments) {
+   for (auto &comment : this->comments)
+   {
       cout << "\t" << comment << endl;
    }
    cout << "Number of coils I: " << numberOfCoils << endl;
@@ -286,19 +324,19 @@ void Instance::display()
          {
             cout << "\t\tMode " << mode << endl;
             cout << "\t\t\tProcessingTime: " << processingTimes[make_tuple(coil, line, mode)] << endl;
-            cout << "\t\t\tSetup times and stringer needed" << endl;
+            cout << "\t\t\tSetup times and stringer costs " << endl;
             for (auto other_coil : this->coils)
             {
                cout << "\t\t\t\t Other Coil " << other_coil << endl;
                for (auto other_mode : this->modes[make_tuple(other_coil, line)])
                {
-                  try
+                  auto tuple = make_tuple(coil, mode, other_coil, other_mode, line);
+
+                  if (this->stringerNeeded[tuple])
                   {
-                     auto &setupTime = this->setupTimes.at(make_tuple(coil, mode, other_coil, other_mode, line));
-                     cout << "\t\t\t\t\tMode " << other_mode << ": Setup Time " << setupTime << endl;
-                  }
-                  catch (const std::out_of_range &_)
-                  {
+                     auto setupTime = this->setupTimes[tuple];
+                     auto costs = this->stringerCosts[tuple];
+                     cout << "\t\t\t\t\tMode " << other_mode << ": Setup Time " << setupTime << "/ Costs " << costs << endl;
                   }
                }
             }
@@ -306,4 +344,19 @@ void Instance::display()
          }
       }
    }
+}
+
+bool Instance::IsStartCoil(Coil i)
+{
+   return i == this->startCoil;
+}
+
+bool Instance::IsEndCoil(Coil i)
+{
+   return i == this->endCoil;
+}
+
+bool Instance::IsRegularCoil(Coil i)
+{
+   return !IsStartCoil(i) && !IsEndCoil(i);
 }

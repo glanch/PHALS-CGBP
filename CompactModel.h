@@ -31,15 +31,14 @@ public:
    void SetSCIPParameters();
 
 private:
-   constexpr char[] var_Z_fmt = "Z_%d";
+
    shared_ptr<Instance> instance_;
    SCIP* scip_;
 
-   // sentinels: start and end coils
-   Coil start_coil_;
-   Coil end_coil_;
 
    // variables
+   // dummy variable
+   SCIP_VAR* var_constant_one_;
    map<tuple<Coil, Coil, ProductionLine, Mode, Mode>, SCIP_VAR*> vars_X_;
 
    map<Coil, SCIP_VAR*> vars_Z_;
@@ -56,5 +55,13 @@ private:
 
    map<Coil, SCIP_CONS*> cons_delay_linking_;
 
-   map<pair<Coil, Coil>, SCIP_CONS*> cons_start_time_linking_;
+   map<tuple<Coil, Coil>, SCIP_CONS*> cons_start_time_linking_;
+
+   SCIP_CONS* cons_max_delayed_coils_;
+
+
+   void CreateZVariable(Coil coil_i);
+   void CreateSVariable(Coil coil_i);
+   void CreateXVariable(Coil coil_i, Coil coil_j, ProductionLine line, Mode mode_i, Mode mode_j);
+
 };

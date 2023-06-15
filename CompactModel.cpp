@@ -3,6 +3,76 @@
 #include <scip/scip_prob.h>
 #include "Settings.h"
 
+void CompactModel::CreateZVariable(Coil coil_i)
+{
+   assert(vars_Z_.count(coil_i) == 0);
+   char var_cons_name[Settings::kSCIPMaxStringLength];
+
+   // create Z variable
+   // initialize map entry, TODO: find out if this is necessary
+   vars_Z_[coil_i] = nullptr;
+
+   SCIP_VAR **z_var_pointer = &vars_Z_[coil_i];
+   SCIPsnprintf(var_cons_name, Settings::kSCIPMaxStringLength, "Z_C%d", coil_i);
+   SCIPcreateVarBasic(scip_,                 //
+                      z_var_pointer,         // returns the address of the newly created variable
+                      var_cons_name,         // name
+                      0,                     // lower bound
+                      1,                     // upper bound
+                      0,                     // objective function coefficient, equal to 0 according to model
+                      SCIP_VARTYPE_INTEGER); // variable type
+
+   SCIPaddVar(scip_, *z_var_pointer);
+}
+
+void CompactModel::CreateSVariable(Coil coil_i)
+{
+   assert(vars_S_.count(coil_i) == 0);
+   // bounds of variable: if this is start coil, variable should be equal to 0, else 0 <= var <= +infty
+   SCIP_Real lb = instance_->IsStartCoil(coil_i) ? 0 : 0;
+   SCIP_Real ub = instance_->IsStartCoil(coil_i) ? 0 : SCIPinfinity(scip_);
+
+   char var_cons_name[Settings::kSCIPMaxStringLength];
+
+   // initialize variable ptr in map
+   vars_S_[coil_i] = nullptr;
+
+   SCIP_VAR **s_var_pointer = &vars_S_[coil_i];
+   SCIPsnprintf(var_cons_name, Settings::kSCIPMaxStringLength, "S_C%d", coil_i);
+   SCIPcreateVarBasic(scip_,                    //
+                      s_var_pointer,            // returns the address of the newly created variable
+                      var_cons_name,            // name
+                      lb,                       // lower bound, see above
+                      ub,                       // upper bound, see above
+                      0,                        // objective function coefficient, equal to 0 according to model
+                      SCIP_VARTYPE_CONTINUOUS); // variable type
+
+   SCIPaddVar(scip_, *s_var_pointer);
+}
+void CompactModel::CreateXVariable(Coil coil_i, Coil coil_j, ProductionLine line, Mode mode_i, Mode mode_j)
+{
+   // bounds of variable: if coil_i = coil_j, variable should be equal to 0, else binary, i.e. 0 <= var <= 0
+   SCIP_Real lb = coil_i == coil_j ? 0 : 0;
+   SCIP_Real ub = coil_i == coil_j ? 0 : 1;
+
+   char var_cons_name[Settings::kSCIPMaxStringLength];
+
+   // initialize variable ptr in map
+   auto var_tuple = make_tuple(coil_i, coil_j, line, mode_i, mode_j);
+   assert(vars_X_.count(var_tuple) == 0);
+   SCIP_VAR **x_var_pointer = &vars_X_[var_tuple];
+   SCIPsnprintf(var_cons_name, Settings::kSCIPMaxStringLength, "X_CI%d_CJ%d_L%d_MI%d_MJ%d", coil_i, coil_j, line, mode_i, mode_j);
+   SCIPcreateVarBasic(scip_,                                                                      //
+                      x_var_pointer,                                                              // returns the address of the newly created variable
+                      var_cons_name,                                                              // name
+                      0,                                                                          // lower bound
+                      1,                                                                          // upper bound
+                      instance_->stringerCosts[make_tuple(coil_i, mode_i, coil_j, mode_j, line)], // objective function coefficient, this is equal to c_ijkmn. If c_ijkmn is not presented, c_ijkmn is initialized with 0 and 0 is returned, i.e. coefficient is 0
+                      SCIP_VARTYPE_INTEGER);                                                      // variable type
+
+   SCIPaddVar(scip_, *x_var_pointer);
+}
+
 /**
  * @brief Construct a new Compact Model:: Compact Model object
  *
@@ -34,165 +104,365 @@ CompactModel::CompactModel(shared_ptr<Instance> instance) : instance_(instance)
    //  Create and add all variables
    // #####################################################################################################################
 
+   // constant variable
+   SCIPsnprintf(var_cons_name, Settings::kSCIPMaxStringLength, "Const");
+   SCIPcreateVarBasic(scip_,                    //
+                      &var_constant_one_,       // returns the address of the newly created variable
+                      var_cons_name,            // name
+                      1,                        // lower bound
+                      1,                        // upper bound
+                      0,                        // objective function coefficient, equal to 0 according to model
+                      SCIP_VARTYPE_CONTINUOUS); // variable type
+
+   SCIPaddVar(scip_, var_constant_one_);
+
    for (auto &line : instance_->productionLines)
    {
       for (auto &coil_i : instance_->coils)
       {
-         // create Z variable
-         SCIP_VAR** z_var_pointer = &vars_Z_[coil_i];
-         SCIPsnprintf(var_cons_name, Settings::kSCIPMaxStringLength, this->var_Z_fmt, coil_i);
-         SCIPcreateVarBasic(scip_,                //
-                     z_var_pointer,          // returns the address of the newly created variable
-                     var_cons_name,        // name
-                     0,                    // lower bound
-                     1,                    // upper bound
-                     1,                    // objective function coefficient, this is equal to 1 according to (1)
-                     SCIP_VARTYPE_BINARY); // variable type
          for (auto &coil_j : instance_->coils)
          {
-            if (coil_i != coil_j)
+            // if coil_i and coil_j are both sentinel coils, coil_i is end coil or coil_j is start coil, skip this iteration, else, continue
+            if ((instance_->IsStartCoil(coil_i) && instance_->IsEndCoil(coil_j)) || instance_->IsEndCoil(coil_i) || instance_->IsStartCoil(coil_j))
             {
-               for (auto &mode_i : instance_->modes[make_tuple(coil_i, line)])
-               {
-                  for (auto &mode_j : instance_->modes[make_tuple(coil_j, line)])
-                  {
-                     SCIP_VAR ** var_pointer = &vars_X_[make_tuple(coil_i, coil_j, line, mode_i, mode_j)];
+               continue;
+            }
+            // if (coil_i != coil_j)
+            // {
+            // TODO: check this!
+            auto &modes_i = instance_->modes[make_tuple(coil_i, line)];
+            auto &modes_j = instance_->modes[make_tuple(coil_j, line)];
 
-                     SCIPcreateVarBasic(scip_,                //
-                                        var_pointer,          // returns the address of the newly created variable
-                                        var_cons_name,        // name
-                                        0,                    // lower bound
-                                        1,                    // upper bound
-                                        1,                    // objective function coefficient, this is equal to 1 according to (1)
-                                        SCIP_VARTYPE_BINARY); // variable type
-                  }
+            for (auto &mode_i : modes_i)
+            {
+               for (auto &mode_j : modes_j)
+               {
+                  CreateXVariable(coil_i, coil_j, line, mode_i, mode_j);
+               }
+            }
+            // }
+         }
+      }
+   }
+
+   for (auto &coil : instance_->coils)
+   {
+      this->CreateZVariable(coil);
+      this->CreateSVariable(coil);
+   }
+
+   // #####################################################################################################################
+   //  Add restrictions
+   // #####################################################################################################################
+
+   // (2) coil partitioning: every regular coil is produced at exactly one line
+   for (auto &coil_i : instance_->coils)
+   {
+      // skip sentinel coils
+      if (!instance_->IsRegularCoil(coil_i))
+      {
+         continue;
+      }
+
+      SCIPsnprintf(var_cons_name, Settings::kSCIPMaxStringLength, "coil_partitioning_%d", coil_i);
+
+      SCIPcreateConsBasicLinear(scip_,                            // scip
+                                &cons_coil_partitioning_[coil_i], // cons
+                                var_cons_name,                    // name
+                                0,                                // nvar
+                                0,                                // vars
+                                0,                                // coeffs
+                                1,                                // lhs
+                                1);                               // rhs
+
+      // add coefficients
+      for (auto &line : instance_->productionLines)
+      {
+         for (auto &coil_j : instance_->coils)
+         {
+            // skip start coil since they may occur at multiple lines
+            if (instance_->IsStartCoil(coil_j))
+            {
+               continue;
+            }
+
+            for (auto &mode_i : instance_->modes[make_tuple(coil_i, line)])
+            {
+               for (auto &mode_j : instance_->modes[make_tuple(coil_j, line)])
+               {
+                  auto tuple = make_tuple(coil_i, coil_j, line, mode_i, mode_j);
+                  auto &var_X = vars_X_[make_tuple(coil_i, coil_j, line, mode_i, mode_j)];
+                  SCIPaddCoefLinear(scip_, cons_coil_partitioning_[coil_i], var_X, 1);
                }
             }
          }
       }
+
+      SCIPaddCons(scip_, cons_coil_partitioning_[coil_i]);
    }
-   //    for( int j = 0; j < _ins->_nbBins; ++j )
-   //    {
-   //       SCIPsnprintf(var_cons_name, Settings::kSCIPMaxStringLength, "Y_%d", j); // set name for debugging
 
-   //       SCIPcreateVarBasic(scip_,              //
-   //                          &_var_Y[j],           // returns the address of the newly created variable
-   //                          var_cons_name,        // name
-   //                          0,                    // lower bound
-   //                          1,                    // upper bound
-   //                          1,                    // objective function coefficient, this is equal to 1 according to (1)
-   //                          SCIP_VARTYPE_BINARY); // variable type
+   // (3) production line start: every line has exactly one successor of starting coil
+   for (auto &line : instance_->productionLines)
+   {
+      SCIPsnprintf(var_cons_name, Settings::kSCIPMaxStringLength, "production_line_start_%d", line);
 
-   //       SCIPaddVar(scip_, _var_Y[j]); // add var to scip-env
-   //    }
+      SCIPcreateConsBasicLinear(scip_,                              // scip
+                                &cons_production_line_start_[line], // cons
+                                var_cons_name,                      // name
+                                0,                                  // nvar
+                                0,                                  // vars
+                                0,                                  // coeffs
+                                1,                                  // lhs
+                                1);                                 // rhs
 
-   //    // #####################################################################################################################
-   //    //  binary variable X_ij
+      // add coefficients
+      Coil coil_i = instance_->startCoil; // this is the start coil
+      for (auto &coil_j : instance_->coils)
+      {
+         // skip sentinel coils
+         if (!instance_->IsRegularCoil(coil_j))
+         {
+            continue;
+         }
 
-   //    // set all dimensions for X_ij, with empty pointers
-   //    _var_X.resize(_ins->_nbItems); // first dimension of X_ij is equal to the amount of items in this instance
+         for (auto &mode_i : instance_->modes[make_tuple(coil_i, line)])
+         {
+            for (auto &mode_j : instance_->modes[make_tuple(coil_j, line)])
+            {
+               SCIPaddCoefLinear(scip_, cons_production_line_start_[line], vars_X_[make_tuple(coil_i, coil_j, line, mode_i, mode_j)], 1);
+            }
+         }
+      }
+      SCIPaddCons(scip_, cons_production_line_start_[line]);
+   }
 
-   //    for( int i = 0; i < _ins->_nbItems; ++i )
-   //    {
-   //       _var_X[i].resize(_ins->_nbItems,
-   //                        nullptr); // second dimension of X_ij is equal to the amount of bins in this instance
-   //    }
-   //    // create and add the variable Y_ij to the model
-   //    for( int i = 0; i < _ins->_nbItems; ++i )
-   //    {
-   //       for( int j = 0; j < _ins->_nbBins; ++j )
-   //       {
-   //          SCIPsnprintf(var_cons_name, 255, "X_%d_%d", i, j); // set name
+   // (4) production line end: every line has exactly one predecessor of end coil
+   for (auto &line : instance_->productionLines)
+   {
+      SCIPsnprintf(var_cons_name, Settings::kSCIPMaxStringLength, "production_line_end_%d", line);
 
-   //          SCIPcreateVarBasic(scip_,
-   //                             &_var_X[i][j], // returns the address of the newly created variable
-   //                             var_cons_name, // name
-   //                             0,             // lower bound
-   //                             1,             // upper bound
-   //                             0, // objective function coefficient, this is equal to 0 because the variable does not
-   //                                // appear in the objective (1)
-   //                             SCIP_VARTYPE_BINARY); // variable type
+      SCIPcreateConsBasicLinear(scip_,                            // scip
+                                &cons_production_line_end_[line], // cons
+                                var_cons_name,                    // name
+                                0,                                // nvar
+                                0,                                // vars
+                                0,                                // coeffs
+                                1,                                // lhs
+                                1);                               // rhs
 
-   //          SCIPaddVar(scip_, _var_X[i][j]); // add var to scip-env
-   //       }
-   //    }
-   //    // #####################################################################################################################
-   //    //  Add restrictions
-   //    // #####################################################################################################################
+      // add coefficients
+      Coil coil_j = instance_->endCoil; // this is the end coil
+      for (auto &coil_i : instance_->coils)
+      {
+         // skip sentinel coils
+         if (!instance_->IsRegularCoil(coil_i))
+         {
+            continue;
+         }
 
-   //    // #####################################################################################################################
-   //    //  restriction (2) in lecture handout: unique assignment constraints
+         for (auto &mode_i : instance_->modes[make_tuple(coil_i, line)])
+         {
+            for (auto &mode_j : instance_->modes[make_tuple(coil_j, line)])
+            {
+               auto tuple = make_tuple(coil_i, coil_j, line, mode_i, mode_j);
+               auto &var_X = vars_X_[tuple];
+               SCIPaddCoefLinear(scip_, cons_production_line_end_[line], var_X, 1);
+            }
+         }
+      }
+      SCIPaddCons(scip_, cons_production_line_end_[line]);
+   }
 
-   //    // sum(j in J, X_ij) = 1 for all i in I
-   //    // is equal to:
-   //    // 1 <= sum(j in J, X_ij) <= 1 for all i in I
+   // (5) flow conservation: for every line, every coil, and every corresponding mode there is equal amount of incoming and outgoing edges
+   for (auto &line : instance_->productionLines)
+   {
+      for (auto &coil_j : instance_->coils)
+      {
+         // skip non-regular coils
+         if (!instance_->IsRegularCoil(coil_j))
+            continue;
 
-   //    // set all dimension for constraint with empty pointer
+         auto coil_j_line_tuple = make_tuple(coil_j, line);
+         for (auto &mode_j : instance_->modes[coil_j_line_tuple])
+         {
+            auto cons_tuple = make_tuple(line, coil_j, mode_j);
+            SCIPsnprintf(var_cons_name, Settings::kSCIPMaxStringLength, "cons_flow_conservation_L%d_C%d_M%d", line, coil_j, mode_j);
 
-   //    _cons_unique_assignment.resize(_ins->_nbItems, nullptr); // dimension is equal to the number of items in theinstance
+            SCIPcreateConsBasicLinear(scip_,                                // scip
+                                      &cons_flow_conservation_[cons_tuple], // cons
+                                      var_cons_name,                        // name
+                                      0,                                    // nvar
+                                      0,                                    // vars
+                                      0,                                    // coeffs
+                                      0,                                    // lhs
+                                      0);                                   // rhs
 
-   //    for( int i = 0; i < _ins->_nbItems; ++i )
-   //    {
-   //       SCIPsnprintf(var_cons_name, 255, "unique_assignment_%d", i);
+            // add coefficients
 
-   //       SCIPcreateConsBasicLinear(scip_,                     // scip
-   //                                 &_cons_unique_assignment[i], // cons
-   //                                 var_cons_name,               // name
-   //                                 0,                           // nvar
-   //                                 0,                           // vars
-   //                                 0,                           // coeffs
-   //                                 1,                           // lhs
-   //                                 1);                          // rhs
+            // positive part of LHS: incoming edges
+            for (auto &coil_i : instance_->coils)
+            {
+               // skip end coil and inlude start coil
+               if (instance_->IsEndCoil(coil_i))
+                  continue;
 
-   //       for( int j = 0; j < _ins->_nbBins; ++j ) // sum over all bins j in J
-   //       {
-   //          SCIPaddCoefLinear(scip_, _cons_unique_assignment[i], _var_X[i][j], 1);
-   //       }
+               for (auto &mode_i : instance_->modes[make_tuple(coil_i, line)])
+               {
+                  SCIPaddCoefLinear(scip_, cons_flow_conservation_[cons_tuple], vars_X_[make_tuple(coil_i, coil_j, line, mode_i, mode_j)], 1);
+               }
+            }
 
-   //       SCIPaddCons(scip_, _cons_unique_assignment[i]);
-   //    }
+            // negative part of LHS: outgoing edges
+            for (auto &coil_i : instance_->coils)
+            {
+               // skip start coil and inlude end coil
+               if (instance_->IsStartCoil(coil_i))
+                  continue;
 
-   //    // #####################################################################################################################
-   //    //  restriction (3) in lecture handout: capacity and linking constraints
+               for (auto &mode_i : instance_->modes[make_tuple(coil_i, line)])
+               {
+                  SCIPaddCoefLinear(scip_, cons_flow_conservation_[cons_tuple], vars_X_[make_tuple(coil_j, coil_i, line, mode_j, mode_i)], -1);
+               }
+            }
 
-   //    // sum(i in I, w_i * X_ij) <= b * Y_j for all bins j in J
-   //    // is equal to:
-   //    // -infty <= sum(i in I, w_i * X_ij) - b * Y_j <= 0 for all bins j in J
+            SCIPaddCons(scip_, cons_flow_conservation_[cons_tuple]);
+         }
+      }
+   }
 
-   //    // set all dimensions
-   //    _cons_capacity_and_linking.resize(_ins->_nbBins,
-   //                                      nullptr); // dimension is equal to the number of bins in this instance
+   // (6) delay linking: link Z_i, S_i and X_..
+   for (auto &coil_i : instance_->coils)
+   {
+      // skip non-regular coils
+      if (!instance_->IsRegularCoil(coil_i))
+         continue;
 
-   //    for( int j = 0; j < _ins->_nbBins; ++j )
-   //    {
-   //       SCIPsnprintf(var_cons_name, 255, "capacity_and_linking_%i", j); // set constraint name for debugging
+      SCIPsnprintf(var_cons_name, Settings::kSCIPMaxStringLength, "delay_linking_C%d", coil_i);
 
-   //       SCIPcreateConsBasicLinear(scip_,                        // scip
-   //                                 &_cons_capacity_and_linking[j], // cons
-   //                                 var_cons_name,                  // name
-   //                                 0,                              // number of variables
-   //                                 0,                              // vars
-   //                                 0,                              // coeffs
-   //                                 -SCIPinfinity(scip_),         // lhs
-   //                                 0);                             // rhs
+      SCIPcreateConsBasicLinear(scip_,                        // scip
+                                &cons_delay_linking_[coil_i], // cons
+                                var_cons_name,                // name
+                                0,                            // nvar
+                                0,                            // vars
+                                0,                            // coeffs
+                                -SCIPinfinity(scip_),         // lhs
+                                0);                           // rhs
 
-   //       for( int i = 0; i < _ins->_nbItems; ++i ) // sum over all items i in I
-   //       {
-   //          SCIPaddCoefLinear(scip_,                       // scip-env
-   //                            _cons_capacity_and_linking[j], // constraint
-   //                            _var_X[i][j],                  // variable
-   //                            _ins->par_w[i]);               // coefficient
-   //       }
-   //       SCIPaddCoefLinear(scip_, _cons_capacity_and_linking[j], _var_Y[j], -ins->par_b);
-   //       SCIPaddCons(scip_, _cons_capacity_and_linking[j]); // add constraint to the scip-env
-   //    }
+      // add coefficients
+      // add S_i
+      SCIPaddCoefLinear(scip_, cons_delay_linking_[coil_i], vars_S_[coil_i], 1);
 
-   //    // #####################################################################################################################
-   //    //  Generate LP file
-   //    // #####################################################################################################################
+      // other
+      for (auto &line : instance_->productionLines)
+      {
+         for (auto &coil_j : instance_->coils)
+         {
+            // if coil_j is start coil, skip
+            if (instance_->IsStartCoil(coil_j))
+               continue;
 
-   //    // Generate a file to show the LP-Program, that is build. "FALSE" = we get our specific choosen names.
-   //    SCIPwriteOrigProblem(scip_, "compact_model_bpp.lp", "lp", FALSE);
+            for (auto &mode_j : instance_->modes[make_tuple(coil_j, line)])
+            {
+               for (auto &mode_i : instance_->modes[make_tuple(coil_i, line)])
+               {
+                  auto processing_time = instance_->processingTimes[make_tuple(coil_i, line, mode_i)];
+
+                  SCIPaddCoefLinear(scip_, cons_delay_linking_[coil_i], vars_X_[make_tuple(coil_i, coil_j, line, mode_i, mode_j)], processing_time);
+               }
+            }
+         }
+      }
+
+      // RHS
+      // due date d_i
+      SCIPaddCoefLinear(scip_, cons_delay_linking_[coil_i], var_constant_one_, -instance_->dueDates[coil_i]);
+
+      // big M linearization
+      SCIP_Real big_M = 10000; // TODO: !!!!
+      SCIPaddCoefLinear(scip_, cons_delay_linking_[coil_i], vars_Z_[coil_i], -big_M);
+
+      SCIPaddCons(scip_, cons_delay_linking_[coil_i]);
+   }
+
+   // (7) start time linking: link S_i and X_..
+   for (auto &coil_i : instance_->coils)
+   {
+      for (auto &coil_j : instance_->coils)
+      {
+         // skip non-regular coils
+         if (!instance_->IsRegularCoil(coil_i) || !instance_->IsRegularCoil(coil_j))
+            continue;
+
+         auto con_tuple = make_tuple(coil_i, coil_j);
+
+         SCIPsnprintf(var_cons_name, Settings::kSCIPMaxStringLength, "start_time_linking_C%d", coil_i);
+
+         SCIPcreateConsBasicLinear(scip_,                                // scip
+                                   &cons_start_time_linking_[con_tuple], // cons
+                                   var_cons_name,                        // name
+                                   0,                                    // nvar
+                                   0,                                    // vars
+                                   0,                                    // coeffs
+                                   -SCIPinfinity(scip_),                 // lhs
+                                   0);                                   // rhs
+
+         // add coefficients
+         // add S_i
+         SCIPaddCoefLinear(scip_, cons_start_time_linking_[con_tuple], vars_S_[coil_i], 1);
+
+         // add -S_j
+         SCIPaddCoefLinear(scip_, cons_start_time_linking_[con_tuple], vars_S_[coil_j], -1);
+
+         // add -M
+         SCIP_Real big_M = 10000;
+         SCIPaddCoefLinear(scip_, cons_start_time_linking_[con_tuple], var_constant_one_, -big_M);
+
+         for (auto &line : instance_->productionLines)
+         {
+            for (auto &mode_i : instance_->modes[make_tuple(coil_i, line)])
+            {
+               for (auto &mode_j : instance_->modes[make_tuple(coil_j, line)])
+               {
+                  // (p_ikm+tijkmn)*X_ijkmn
+                  auto processing_time = instance_->processingTimes[make_tuple(coil_i, line, mode_i)];
+                  auto setup_time = instance_->setupTimes[make_tuple(coil_i, mode_i, coil_j, mode_j, line)];
+                  SCIP_Real coefficient = processing_time + setup_time;
+
+                  SCIPaddCoefLinear(scip_, cons_start_time_linking_[con_tuple], vars_X_[make_tuple(coil_i, coil_j, line, mode_i, mode_j)], coefficient);
+
+                  // M*X_ijkmn
+                  SCIPaddCoefLinear(scip_, cons_start_time_linking_[con_tuple], vars_X_[make_tuple(coil_i, coil_j, line, mode_i, mode_j)], big_M);
+               }
+            }
+         }
+         SCIPaddCons(scip_, cons_start_time_linking_[con_tuple]);
+      }
+   }
+   
+   // (8) max number of delayed columns
+   SCIPsnprintf(var_cons_name, Settings::kSCIPMaxStringLength, "max_delayed_coils");
+
+   SCIPcreateConsBasicLinear(scip_,                           // scip
+                             &cons_max_delayed_coils_,        // cons
+                             var_cons_name,                   // name
+                             0,                               // nvar
+                             0,                               // vars
+                             0,                               // coeffs
+                             -SCIPinfinity(scip_),            // lhs
+                             instance_->maximumDelayedCoils); // rhs
+   for (auto &coil_i : instance_->coils)
+   {
+      // scip non-regular coils
+      if (!instance_->IsRegularCoil(coil_i))
+         continue;
+
+      SCIPaddCoefLinear(scip_, cons_max_delayed_coils_, vars_Z_[coil_i], 1);
+   }
+
+   SCIPaddCons(scip_, cons_max_delayed_coils_);
+
+   // Generate a file to show the LP-Program, that is build. "FALSE" = we get our specific choosen names.
+   SCIPwriteOrigProblem(scip_, "compact_model_PHALS.lp", "lp", FALSE);
 }
 
 /**
@@ -213,44 +483,52 @@ CompactModel::~CompactModel()
    {
       SCIPreleaseCons(scip_, &cons);
    }
-   // for( int i = 0; i < _ins->_nbItems; ++i )
-   // {
-   //    SCIPreleaseCons(scip_, &_cons_unique_assignment[i]);
-   // }
 
-   // // release all capacity and linking constraints
+   for (auto &[_, cons] : this->cons_production_line_start_)
+   {
+      SCIPreleaseCons(scip_, &cons);
+   }
 
-   // for( int j = 0; j < _ins->_nbBins; j++ )
-   // {
+   for (auto &[_, cons] : this->cons_production_line_end_)
+   {
+      SCIPreleaseCons(scip_, &cons);
+   }
 
-   //    SCIPreleaseCons(scip_, &_cons_capacity_and_linking[j]);
-   // }
+   for (auto &[_, cons] : this->cons_flow_conservation_)
+   {
+      SCIPreleaseCons(scip_, &cons);
+   }
 
-   // // #####################################################################################################################
-   // //  release all variables
-   // // #####################################################################################################################
+   for (auto &[_, cons] : this->cons_delay_linking_)
+   {
+      SCIPreleaseCons(scip_, &cons);
+   }
 
-   // // release all X_ij - variables
+   for (auto &[_, cons] : this->cons_start_time_linking_)
+   {
+      SCIPreleaseCons(scip_, &cons);
+   }
 
-   // for( int i = 0; i < _ins->_nbItems; ++i ) // sum over all i in I
-   // {
-   //    for( int j = 0; j < _ins->_nbBins; ++j ) // sum over all j in J
-   //    {
-   //       SCIPreleaseVar(scip_, &_var_X[i][j]);
-   //    }
-   // }
+   SCIPreleaseCons(scip_, &cons_max_delayed_coils_);
 
-   // // release all Y_j - variables
-   // for( int j = 0; j < _ins->_nbBins; ++j ) // sum over all bins j in J
-   // {
-   //    SCIPreleaseVar(scip_, &_var_Y[j]);
-   // }
+   for (auto &[_, var] : this->vars_X_)
+   {
+      SCIPreleaseVar(scip_, &var);
+   }
 
-   // // #####################################################################################################################
-   // //  release SCIP object
-   // // #####################################################################################################################
-   // //  At the end release the SCIP object itself
-   // SCIPfree(&scip_);
+   for (auto &[_, var] : this->vars_S_)
+   {
+      SCIPreleaseVar(scip_, &var);
+   }
+
+   for (auto &[_, var] : this->vars_Z_)
+   {
+      SCIPreleaseVar(scip_, &var);
+   }
+
+   SCIPreleaseVar(scip_, &var_constant_one_);
+
+   SCIPfree(&scip_);
 }
 
 /**
