@@ -438,7 +438,7 @@ CompactModel::CompactModel(shared_ptr<Instance> instance) : instance_(instance)
          SCIPaddCons(scip_, cons_start_time_linking_[con_tuple]);
       }
    }
-   
+
    // (8) max number of delayed columns
    SCIPsnprintf(var_cons_name, Settings::kSCIPMaxStringLength, "max_delayed_coils");
 
@@ -567,4 +567,68 @@ void CompactModel::Solve()
  * no parameters and returns nothing. It uses the SCIPprintBestSol() function from the SCIP library to print out the
  * values.
  */
-void CompactModel::DisplaySolution() { SCIPprintBestSol(scip_, NULL, FALSE); };
+
+tuple<bool, Coil, Mode, Mode> CompactModel::FindSucessorCoil(SCIP_Sol *solution, Coil coil_i, ProductionLine line)
+{
+   for (auto &mode_i : instance_->modes[make_tuple(coil_i, line)])
+   {
+      for (auto &coil_j : instance_->coils)
+      {
+         for (auto &mode_j : instance_->modes[make_tuple(coil_j, line)])
+         {
+            auto var_tuple = make_tuple(coil_i, coil_j, line, mode_i, mode_j);
+            if (vars_X_.count(var_tuple) == 0)
+               continue;
+
+            auto &var = vars_X_[var_tuple];
+            if (SCIPgetSolVal(scip_, solution, var) > 0.5)
+            { // TODO: use SCIP epsilon methods
+               return make_tuple(true, coil_j, mode_i, mode_j);
+            }
+         }
+      }
+   }
+
+   return make_tuple(false, 0, 0, 0);
+}
+void CompactModel::DisplaySolution()
+{
+   SCIPprintBestSol(scip_, NULL, FALSE);
+   
+   SCIP_SOL *solution = SCIPgetBestSol(scip_);
+   
+   cout << "==== Coil Assignment ====";
+   for (auto &line : instance_->productionLines)
+   {
+      cout << "Line " << line << endl;
+      Coil coil_i = instance_->startCoil;
+      auto [found, coil_j, mode_i, mode_j] = FindSucessorCoil(solution, coil_i, line);
+
+      assert(found);
+
+      while (coil_j != instance_->endCoil)
+      {
+         if(coil_i == instance_->startCoil ) {
+            cout << "Start";
+         } else {
+            cout << "C" << coil_i << "M" << mode_i;
+            cout << " t=" << SCIPgetSolVal(scip_, solution, vars_S_[coil_i]);
+            if(SCIPgetSolVal(scip_, solution, vars_Z_[coil_i]) > 0.5)
+               cout << " delayed";
+         }
+         cout << " -> ";
+         coil_i = coil_j;
+
+         auto [found_new, coil_j_new, mode_i_new, mode_j_new] = FindSucessorCoil(solution, coil_i, line);
+         found = found_new;
+         coil_j = coil_j_new;
+         mode_i = mode_i_new;
+         mode_j = mode_j_new;
+      }
+
+      cout << "End" << endl;
+
+      cout << "==================================" << endl;
+   }
+
+};
