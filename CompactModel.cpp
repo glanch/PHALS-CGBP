@@ -594,9 +594,9 @@ tuple<bool, Coil, Mode, Mode> CompactModel::FindSucessorCoil(SCIP_Sol *solution,
 void CompactModel::DisplaySolution()
 {
    SCIPprintBestSol(scip_, NULL, FALSE);
-   
+
    SCIP_SOL *solution = SCIPgetBestSol(scip_);
-   
+
    cout << "==== Coil Assignment ====";
    for (auto &line : instance_->productionLines)
    {
@@ -608,12 +608,15 @@ void CompactModel::DisplaySolution()
 
       while (coil_j != instance_->endCoil)
       {
-         if(coil_i == instance_->startCoil ) {
+         if (coil_i == instance_->startCoil)
+         {
             cout << "Start";
-         } else {
+         }
+         else
+         {
             cout << "C" << coil_i << "M" << mode_i;
             cout << " t=" << SCIPgetSolVal(scip_, solution, vars_S_[coil_i]);
-            if(SCIPgetSolVal(scip_, solution, vars_Z_[coil_i]) > 0.5)
+            if (SCIPgetSolVal(scip_, solution, vars_Z_[coil_i]) > 0.5)
                cout << " delayed";
          }
          cout << " -> ";
@@ -630,5 +633,4 @@ void CompactModel::DisplaySolution()
 
       cout << "==================================" << endl;
    }
-
 };

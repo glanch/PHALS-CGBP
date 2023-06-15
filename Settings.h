@@ -1,6 +1,7 @@
 #pragma once
 
-namespace Settings {
+namespace Settings
+{
     constexpr int kSCIPMaxStringLength = 255;
 
 }

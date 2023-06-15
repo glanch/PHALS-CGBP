@@ -36,18 +36,17 @@ public:
    vector<ProductionLine> productionLines;
    vector<Coil> coils;
 
-
    vector<Mode> allModes;
 
    map<Coil, DueDate> dueDates;
-   
+
    std::map<tuple<Coil, ProductionLine>, vector<Mode>> modes;
    map<tuple<Coil, ProductionLine, Mode>, ProcessingTime> processingTimes;
    map<tuple<Coil, Mode, Coil, Mode, ProductionLine>, SetupTime> setupTimes;
    map<tuple<Coil, Mode, Coil, Mode, ProductionLine>, StringerNeeded> stringerNeeded;
    map<tuple<Coil, Mode, Coil, Mode, ProductionLine>, StringerCosts> stringerCosts;
 
-   void read(string nameFile); // function to read data from a file
+   void read(string nameFile);      // function to read data from a file
    void readPhals(string nameFile); // function to read data from a phals file
 
    void display(); // function to display the data
@@ -55,5 +54,4 @@ public:
    bool IsStartCoil(Coil i);
    bool IsEndCoil(Coil i);
    bool IsRegularCoil(Coil i);
-   
 };

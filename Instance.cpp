@@ -12,7 +12,8 @@ void Instance::read(string nameFile)
    while (getline(infile, line))
    {
       // if this line is empty, skip it
-      if(line.length() == 0){
+      if (line.length() == 0)
+      {
          continue;
       }
 
@@ -173,7 +174,6 @@ void Instance::read(string nameFile)
 
    infile.close();
 }
-
 
 bool Instance::IsStartCoil(Coil i)
 {
