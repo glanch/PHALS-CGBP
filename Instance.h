@@ -16,7 +16,7 @@ using Mode = int;
 using StringerNeeded = bool;
 using StringerCosts = int;
 using DueDate = OurTime;
-using ProcessingTime = OurTime;
+using ProcessingTime = double;
 using SetupTime = OurTime;
 
 using std::tuple, std::map, std::pair;
@@ -54,4 +54,5 @@ public:
    bool IsStartCoil(Coil i);
    bool IsEndCoil(Coil i);
    bool IsRegularCoil(Coil i);
+   void printStructured();
 };

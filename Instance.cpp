@@ -175,6 +175,145 @@ void Instance::read(string nameFile)
    infile.close();
 }
 
+void Instance::display()
+{
+   cout << "Instance " << endl;
+   for (auto &comment : this->comments)
+   {
+      cout << "\t" << comment << endl;
+   }
+   cout << "Number of coils I: " << numberOfCoils << endl;
+   cout << "Number of production lines K: " << numberOfProductionLines << endl;
+   for (auto coil : this->coils)
+   {
+      cout << "Coil " << coil << endl;
+
+      for (auto line : this->productionLines)
+      {
+         cout << "\tModes on line " << line << endl;
+         for (auto mode : this->modes[make_tuple(coil, line)])
+         {
+            cout << "\t\tMode " << mode << endl;
+            cout << "\t\t\tProcessingTime: " << processingTimes[make_tuple(coil, line, mode)] << endl;
+            cout << "\t\t\tSetup times and stringer costs " << endl;
+            for (auto other_coil : this->coils)
+            {
+               cout << "\t\t\t\t Other Coil " << other_coil << endl;
+               for (auto other_mode : this->modes[make_tuple(other_coil, line)])
+               {
+                  auto tuple = make_tuple(coil, mode, other_coil, other_mode, line);
+
+                  if (this->stringerNeeded[tuple])
+                  {
+                     auto setupTime = this->setupTimes[tuple];
+                     auto costs = this->stringerCosts[tuple];
+                     cout << "\t\t\t\t\tMode " << other_mode << ": Setup Time " << setupTime << "/ Costs " << costs << endl;
+                  }
+               }
+            }
+            cout << endl;
+         }
+      }
+   }
+}
+
+void Instance::printStructured()
+{
+   auto &os = cout;
+
+   // print modes per coil
+   for (Coil &coil_i : coils)
+   {
+      if (!IsRegularCoil(coil_i))
+         continue;
+      for (ProductionLine &line : productionLines)
+      {
+         for (Mode &mode_i : modes[make_tuple(coil_i, line)])
+         {
+            os << "m " << coil_i << " " << line << " " << mode_i << " 1" << endl;
+         }
+      }
+   }
+
+   os << endl;
+
+   // print processing time
+   for (Coil &coil_i : coils)
+   {
+      if (!IsRegularCoil(coil_i))
+         continue;
+
+      for (ProductionLine &line : productionLines)
+      {
+         for (Mode &mode_i : modes[make_tuple(coil_i, line)])
+         {
+            os << "p " << coil_i << " " << line << " " << mode_i << " " << processingTimes[make_tuple(coil_i, line, mode_i)] << endl;
+         }
+      }
+   }
+
+   os << endl;
+
+   // print stringer costs
+   for (Coil &coil_i : coils)
+   {
+      for (Coil &coil_j : coils)
+      {
+         if (!IsRegularCoil(coil_i) || !IsRegularCoil(coil_j))
+            continue;
+
+         for (ProductionLine &line : productionLines)
+         {
+            for (Mode &mode_i : modes[make_tuple(coil_i, line)])
+            {
+               for (Mode &mode_j : modes[make_tuple(coil_j, line)])
+               {
+                  auto tuple = make_tuple(coil_i, mode_i, coil_j, mode_j, line);
+                  if (stringerNeeded[tuple])
+                  {
+
+                     os << "c " << coil_i << " " << coil_j << " " << line << " " << mode_i << " " << mode_j << " " << stringerCosts[tuple] << endl;
+                  }
+               }
+            }
+         }
+      }
+   }
+
+   os << endl;
+
+   // print stringer times
+   for (Coil &coil_i : coils)
+   {
+      for (Coil &coil_j : coils)
+      {
+         if (!IsRegularCoil(coil_i) || !IsRegularCoil(coil_j))
+            continue;
+
+         for (ProductionLine &line : productionLines)
+         {
+            for (Mode &mode_i : modes[make_tuple(coil_i, line)])
+            {
+               for (Mode &mode_j : modes[make_tuple(coil_j, line)])
+               {
+                  auto tuple = make_tuple(coil_i, mode_i, coil_j, mode_j, line);
+                  if (stringerNeeded[tuple])
+                  {
+
+                     os << "t " << coil_i << " " << coil_j << " " << line << " " << mode_i << " " << mode_j << " " << setupTimes[tuple] << endl;
+                  }
+               }
+            }
+         }
+      }
+   }
+
+
+   // print alpha
+   os << "a " << maximumDelayedCoils;
+
+   os << endl;
+}
 bool Instance::IsStartCoil(Coil i)
 {
    return i == this->startCoil;
