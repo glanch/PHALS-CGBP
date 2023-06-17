@@ -52,8 +52,8 @@ void CompactModel::CreateSVariable(Coil coil_i)
 void CompactModel::CreateXVariable(Coil coil_i, Coil coil_j, ProductionLine line, Mode mode_i, Mode mode_j)
 {
    // bounds of variable: if coil_i = coil_j, variable should be equal to 0, else binary, i.e. 0 <= var <= 0
-   SCIP_Real lb = coil_i == coil_j ? 0 : 0;
-   SCIP_Real ub = coil_i == coil_j ? 0 : 1;
+   SCIP_Real lb = (coil_i == coil_j) ? 0 : 0;
+   SCIP_Real ub = (coil_i == coil_j) ? 0 : 1;
 
    char var_cons_name[Settings::kSCIPMaxStringLength];
 
@@ -65,8 +65,8 @@ void CompactModel::CreateXVariable(Coil coil_i, Coil coil_j, ProductionLine line
    SCIPcreateVarBasic(scip_,                                                                      //
                       x_var_pointer,                                                              // returns the address of the newly created variable
                       var_cons_name,                                                              // name
-                      0,                                                                          // lower bound
-                      1,                                                                          // upper bound
+                      lb,                                                                         // lower bound
+                      ub,                                                                         // upper bound
                       instance_->stringerCosts[make_tuple(coil_i, mode_i, coil_j, mode_j, line)], // objective function coefficient, this is equal to c_ijkmn. If c_ijkmn is not presented, c_ijkmn is initialized with 0 and 0 is returned, i.e. coefficient is 0
                       SCIP_VARTYPE_INTEGER);                                                      // variable type
 
@@ -378,7 +378,7 @@ CompactModel::CompactModel(shared_ptr<Instance> instance) : instance_(instance)
       SCIPaddCoefLinear(scip_, cons_delay_linking_[coil_i], var_constant_one_, -instance_->dueDates[coil_i]);
 
       // big M linearization
-      SCIP_Real big_M = 10000; // TODO: !!!!
+      SCIP_Real big_M = Settings::kBigM; // TODO: !!!!
       SCIPaddCoefLinear(scip_, cons_delay_linking_[coil_i], vars_Z_[coil_i], -big_M);
 
       SCIPaddCons(scip_, cons_delay_linking_[coil_i]);
@@ -395,7 +395,7 @@ CompactModel::CompactModel(shared_ptr<Instance> instance) : instance_(instance)
 
          auto con_tuple = make_tuple(coil_i, coil_j);
 
-         SCIPsnprintf(var_cons_name, Settings::kSCIPMaxStringLength, "start_time_linking_C%d", coil_i);
+         SCIPsnprintf(var_cons_name, Settings::kSCIPMaxStringLength, "start_time_linking_CI%d_CJ%d", coil_i, coil_j);
 
          SCIPcreateConsBasicLinear(scip_,                                // scip
                                    &cons_start_time_linking_[con_tuple], // cons
@@ -414,7 +414,7 @@ CompactModel::CompactModel(shared_ptr<Instance> instance) : instance_(instance)
          SCIPaddCoefLinear(scip_, cons_start_time_linking_[con_tuple], vars_S_[coil_j], -1);
 
          // add -M
-         SCIP_Real big_M = 10000;
+         SCIP_Real big_M = Settings::kBigM;
          SCIPaddCoefLinear(scip_, cons_start_time_linking_[con_tuple], var_constant_one_, -big_M);
 
          for (auto &line : instance_->productionLines)
@@ -581,7 +581,9 @@ tuple<bool, Coil, Mode, Mode> CompactModel::FindSucessorCoil(SCIP_Sol *solution,
                continue;
 
             auto &var = vars_X_[var_tuple];
-            if (SCIPgetSolVal(scip_, solution, var) > 0.5)
+            auto var_value = SCIPgetSolVal(scip_, solution, var);
+
+            if (var_value > 0.5)
             { // TODO: use SCIP epsilon methods
                return make_tuple(true, coil_j, mode_i, mode_j);
             }
@@ -597,7 +599,9 @@ void CompactModel::DisplaySolution()
 
    SCIP_SOL *solution = SCIPgetBestSol(scip_);
 
-   cout << "==== Coil Assignment ====";
+   cout << endl
+        << endl;
+   cout << "==== Coil Assignment ====" << endl;
    for (auto &line : instance_->productionLines)
    {
       cout << "Line " << line << endl;
@@ -606,7 +610,7 @@ void CompactModel::DisplaySolution()
 
       assert(found);
 
-      while (coil_j != instance_->endCoil)
+      while (coil_i != instance_->endCoil)
       {
          if (coil_i == instance_->startCoil)
          {
@@ -631,6 +635,6 @@ void CompactModel::DisplaySolution()
 
       cout << "End" << endl;
 
-      cout << "==================================" << endl;
+      cout << "==== Coil Assignment ====" << endl;
    }
 };
