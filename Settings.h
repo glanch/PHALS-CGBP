@@ -2,6 +2,6 @@
 
 namespace Settings
 {
-    constexpr int kSCIPMaxStringLength = 255;
-
+    constexpr int kSCIPMaxStringLength = 1024;
+    constexpr double kBigM = 10000;
 }
