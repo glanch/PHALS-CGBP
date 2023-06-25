@@ -1,7 +1,7 @@
 #include "CompactModel.h"
+#include "../Settings.h"
 #include <scip/scip_general.h>
 #include <scip/scip_prob.h>
-#include "Settings.h"
 
 void CompactModel::CreateZVariable(Coil coil_i)
 {

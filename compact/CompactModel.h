@@ -1,14 +1,14 @@
 // CompactModel.h
 #pragma once
 
-#include "Instance.h"
+#include "../Instance.h"
+#include "../Settings.h"
 
 /* scip includes */
 #include "objscip/objscip.h"
 #include "objscip/objscipdefplugins.h"
 #include <memory>
 #include <map>
-#include "Settings.h"
 using namespace scip;
 
 class CompactModel

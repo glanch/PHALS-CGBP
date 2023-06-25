@@ -10,7 +10,7 @@ enable_testing()
 #add every .cpp - file
 add_executable(PHALS
     main.cpp
-    CompactModel.cpp
+    compact/CompactModel.cpp
     Instance.cpp
 )
 

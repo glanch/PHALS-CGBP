@@ -1,5 +1,5 @@
 #include "Instance.h"
-#include "CompactModel.h"
+#include "compact/CompactModel.h"
 int main()
 {
    auto instance = make_shared<Instance>();
