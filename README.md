@@ -1,12 +1,12 @@
 # Hausarbeit
-##Modelldefinition PHALS
-#Natation
+## Modelldefinition PHALS
+# Natation
 
 |Indizes und Mengen          |                                                                                  |
 | --------------------------------------------------- | ------------------------------------------------------- |
 |$i,j \ \ \in \mathcal{I}$                            | Menge der Coils                                         |       
 |$k \in \mathcal{K}$  				      | Menge der parallelen Linien                             |
-|$$m \in \mathcal{M_{ik}},~n \in \mathcal{M_{jk}}$    | Menge der möglichen Modi für Coil i und j auf Linie k   |
+|$m \in \mathcal{M_{ik}},~n \in \mathcal{M_{jk}}$    | Menge der möglichen Modi für Coil i und j auf Linie k   |
 
 
 |Parameter                                            |                                                         |
@@ -23,7 +23,7 @@
 | $Z_{i} \in \{0,1\}$                                 | 1, wenn Coil i Verspätung hat, 0 sonst                  |
 | $S_i \geq 0$                                        | Startzeit der Bearbeitung von Coil i                    |
 
-##Kompaktes Modell
+## Kompaktes Modell
 ```math
 Min \sum_{i \in \mathcal{I}} \sum_{j \in \mathcal{I}} \sum_{k \in \mathcal{K}} \sum_{m \in \mathcal{M}_{ik}} \sum_{n \in \mathcal{M}_{jk}} X_{ijkmn} \cdot  c_{ijkmn}\\
 		
