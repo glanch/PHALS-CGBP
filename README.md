@@ -25,11 +25,11 @@
 
 ##Kompaktes Modell
 ```math
-Minimiere   \qquad  \sum_{i \in \mathcal{I}} \sum_{j \in \mathcal{I}} \sum_{k \in \mathcal{K}} \sum_{m \i \mathcal{M}_{ik}} \sum_{n \in \mathcal{M}_{jk}}  X_{ijkmn} \cdot c_{ijkmn} \\
+Min \sum_{i \in \mathcal{I}} \sum_{j \in \mathcal{I}} \sum_{k \in \mathcal{K}} \sum_{m \in \mathcal{M}_{ik}} \sum_{n \in \mathcal{M}_{jk}}  X_{ijkmn} \cdot c_{ijkmn} \\
 
-s.t.\\
+s.t. \\
 
-\sum_{j=1}^{I+1} \sum_{k \in \mathcal{K}} \sum_{m \in \mathcal{M}_{ik}} \sum_{n \in \mathcal{M}_{jk}} X_{ijkmn} = 1  && \forall \ i \in  \mathcal{I} \\
+
 
 
 
