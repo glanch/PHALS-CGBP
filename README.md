@@ -6,7 +6,7 @@
 | --------------------------------------------------- | ------------------------------------------------------- |
 |$i,j \ \ \in \mathcal{I}$                            | Menge der Coils                                         |       
 |$k \in \mathcal{K}$  				      | Menge der parallelen Linien                             |
-|$m \in \mathcal{M}_{ik}$ , $n\ \in \mathcal{M}_{jk}$ | Menge der möglichen Modi für Coil i und j auf Linie k   |
+|$m \in \mathcal{M}_{ik} , n\ \in \mathcal{M}_{jk}$ | Menge der möglichen Modi für Coil i und j auf Linie k   |
 
 
 |Parameter                                            |                                                         |
@@ -21,10 +21,10 @@
 | --------------------------------------------------- | ------------------------------------------------------- |
 | $X_{ijkmn} \in \{0,1\}$                             |  1, wenn Coil i in Modus m direkt vor Coil j in Modus n auf der Linie k produziert wird, 0 sonst |
 | $Z_{i} \in \{0,1\}$                                 | 1, wenn Coil i Verspätung hat, 0 sonst                  |
-| $S_i$ \geq 0$                                       | Startzeit der Bearbeitung von Coil i                    |
+| $S_i \geq 0$                                       | Startzeit der Bearbeitung von Coil i                    |
 
 ##Kompaktes Modell
-'''math
+```math
 Minimiere   \qquad  \sum_{i \in \mathcal{I}} \sum_{j \in \mathcal{I}} \sum_{k \in \mathcal{K}} \sum_{m \i \mathcal{M}_{ik}} \sum_{n \in \mathcal{M}_{jk}}  X_{ijkmn} \cdot c_{ijkmn} \\
 
 s.t.\\
