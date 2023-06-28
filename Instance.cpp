@@ -39,10 +39,25 @@ void Instance::read(string nameFile)
       {
          ss >> this->numberOfCoils;
 
-         this->coils.resize(this->numberOfCoils);
-         std::iota(std::begin(this->coils), std::end(this->coils), 0); // coils are indexed by 0,...,I-1
-         this->startCoil = -1;                                         //this->numberOfCoils;
-         this->endCoil = this->numberOfCoils;                          // + 1;
+         // initialize all coil sets
+         auto coil_sets = {&this->coils, &this->regularCoils, &this->coilsWithoutStartCoil, &this->coilsWithoutEndCoil};
+         for (auto coil_set : coil_sets)
+         {
+            coil_set->resize(this->numberOfCoils);
+            std::iota(std::begin(*coil_set), std::end(*coil_set), 0); // coils are indexed by 0,...,I-1
+         }
+
+         this->startCoil = -1;                //this->numberOfCoils;
+         this->endCoil = this->numberOfCoils; // + 1;
+
+         // add both sentinel coils to coil sets
+         // start coil
+         this->coils.push_back(this->startCoil);
+         this->coilsWithoutEndCoil.push_back(this->startCoil);
+
+         // end coil
+         this->coils.push_back(this->endCoil);
+         this->coilsWithoutStartCoil.push_back(this->endCoil);
 
          break;
       }
@@ -167,10 +182,6 @@ void Instance::read(string nameFile)
       modes[make_tuple(this->startCoil, line)] = {0};
       modes[make_tuple(this->endCoil, line)] = {0};
    }
-
-   // add both to coils
-   this->coils.push_back(this->startCoil);
-   this->coils.push_back(this->endCoil);
 
    infile.close();
 }
@@ -307,7 +318,6 @@ void Instance::printStructured()
          }
       }
    }
-
 
    // print alpha
    os << "a " << maximumDelayedCoils;

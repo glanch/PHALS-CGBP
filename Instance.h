@@ -35,6 +35,9 @@ public:
 
    vector<ProductionLine> productionLines;
    vector<Coil> coils;
+   vector<Coil> regularCoils;
+   vector<Coil> coilsWithoutStartCoil;
+   vector<Coil> coilsWithoutEndCoil;
 
    vector<Mode> allModes;
 
