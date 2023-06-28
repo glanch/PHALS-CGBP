@@ -1,23 +1,155 @@
 #include "Master.h"
+#include "../Settings.h"
 #include <scip/scip_cons.h>
 
-/**
- * @brief Construct a new Master:: Master object
- *
- * @param ins pointer to a instance object
- *
- * @note This code defines the constructor for the Master class, which is part of a larger program for solving a BPP
- * using column generation.
- * The constructor takes an instance object (ins) as input and assigns it to a private pointer variable (_ins) in the
- * Master class.
- * It then creates a SCIP (Solving Constraint Integer Programs) environment and loads all the default plugins.
- * After that, it creates an empty problem using the SCIPcreateProb() function.
- * Next, it sets all optional SCIP parameters by calling the setSCIPParameters() function.
- * Following this, the function creates the name dummy variable (var_cons_name), resizes a vector (_var_lambda) for use
- * later, and creates one set of linear constraints: _cons_onePatternPerItem
- * The _cons_onePatternPerItem constraints ensure that each item is packed is packed exactly once.
- * Finally, the function writes the original LP program to a file using the SCIPwriteOrigProblem() function
- */
+void Master::CreateZVariable(Coil coil_i)
+{
+   assert(vars_Z_.count(coil_i) == 0);
+   char var_cons_name[Settings::kSCIPMaxStringLength];
+
+   // create Z variable
+   // initialize map entry, TODO: find out if this is necessary
+   vars_Z_[coil_i] = nullptr;
+
+   SCIP_VAR **z_var_pointer = &vars_Z_[coil_i];
+   SCIPsnprintf(var_cons_name, Settings::kSCIPMaxStringLength, "Z_C%d", coil_i);
+   SCIPcreateVarBasic(scipRMP_,              //
+                      z_var_pointer,         // returns the address of the newly created variable
+                      var_cons_name,         // name
+                      0,                     // lower bound
+                      1,                     // upper bound
+                      0,                     // objective function coefficient, equal to 0 according to model
+                      SCIP_VARTYPE_INTEGER); // variable type
+
+   SCIPaddVar(scipRMP_, *z_var_pointer);
+
+   // (C) original variable constraints
+   // add constraints to orig var constraint
+   SCIPsnprintf(var_cons_name, Settings::kSCIPMaxStringLength, "orig_var_Z_C%d", coil_i);
+
+   SCIPcreateConsLinear(scipRMP_,                     // scip
+                        &cons_original_var_Z[coil_i], // cons
+                        var_cons_name,                // name
+                        0,                            // nvar
+                        0,                            // vars
+                        0,                            // coeffs
+                        0,                            // lhs
+                        0,                            // rhs
+                        TRUE,                         // initial
+                        FALSE,                        // separate
+                        TRUE,                         // enforce
+                        TRUE,                         // check
+                        TRUE,                         // propagate
+                        FALSE,                        // local
+                        TRUE,                         // modifiable
+                        FALSE,                        // dynamic
+                        FALSE,                        // removable
+                        FALSE);                       // stick at nodes
+
+   SCIPaddCoefLinear(scipRMP_, cons_original_var_Z[coil_i], *z_var_pointer, 1);
+   SCIPaddCons(scipRMP_, cons_original_var_Z[coil_i]);
+}
+
+void Master::CreateSVariable(Coil coil_i)
+{
+   assert(vars_S_.count(coil_i) == 0);
+   // bounds of variable: if this is start coil, variable should be equal to 0, else 0 <= var <= +infty
+   SCIP_Real lb = instance_->IsStartCoil(coil_i) ? 0 : 0;
+   SCIP_Real ub = instance_->IsStartCoil(coil_i) ? 0 : SCIPinfinity(scipRMP_);
+
+   char var_cons_name[Settings::kSCIPMaxStringLength];
+
+   // initialize variable ptr in map
+   vars_S_[coil_i] = nullptr;
+
+   SCIP_VAR **s_var_pointer = &vars_S_[coil_i];
+   SCIPsnprintf(var_cons_name, Settings::kSCIPMaxStringLength, "S_C%d", coil_i);
+   SCIPcreateVarBasic(scipRMP_,                 //
+                      s_var_pointer,            // returns the address of the newly created variable
+                      var_cons_name,            // name
+                      lb,                       // lower bound, see above
+                      ub,                       // upper bound, see above
+                      0,                        // objective function coefficient, equal to 0 according to model
+                      SCIP_VARTYPE_CONTINUOUS); // variable type
+
+   SCIPaddVar(scipRMP_, *s_var_pointer);
+
+   // (D) original variable constraints
+   // add constraints to orig var constraint
+   SCIPsnprintf(var_cons_name, Settings::kSCIPMaxStringLength, "orig_var_S_C%d", coil_i);
+
+   SCIPcreateConsLinear(scipRMP_,                     // scip
+                        &cons_original_var_S[coil_i], // cons
+                        var_cons_name,                // name
+                        0,                            // nvar
+                        0,                            // vars
+                        0,                            // coeffs
+                        0,                            // lhs
+                        0,                            // rhs
+                        TRUE,                         // initial
+                        FALSE,                        // separate
+                        TRUE,                         // enforce
+                        TRUE,                         // check
+                        TRUE,                         // propagate
+                        FALSE,                        // local
+                        TRUE,                         // modifiable
+                        FALSE,                        // dynamic
+                        FALSE,                        // removable
+                        FALSE);                       // stick at nodes
+
+   SCIPaddCoefLinear(scipRMP_, cons_original_var_S[coil_i], *s_var_pointer, 1);
+   SCIPaddCons(scipRMP_, cons_original_var_S[coil_i]);
+}
+void Master::CreateXVariable(Coil coil_i, Coil coil_j, ProductionLine line, Mode mode_i, Mode mode_j)
+{
+   // bounds of variable: if coil_i = coil_j, variable should be equal to 0, else binary, i.e. 0 <= var <= 0
+   SCIP_Real lb = (coil_i == coil_j) ? 0 : 0;
+   SCIP_Real ub = (coil_i == coil_j) ? 0 : 1;
+
+   char var_cons_name[Settings::kSCIPMaxStringLength];
+
+   // initialize variable ptr in map
+   auto var_tuple = make_tuple(coil_i, coil_j, line, mode_i, mode_j);
+   assert(vars_X_.count(var_tuple) == 0);
+   SCIP_VAR **x_var_pointer = &vars_X_[var_tuple];
+   SCIPsnprintf(var_cons_name, Settings::kSCIPMaxStringLength, "X_CI%d_CJ%d_L%d_MI%d_MJ%d", coil_i, coil_j, line, mode_i, mode_j);
+   SCIPcreateVarBasic(scipRMP_,                                                                   //
+                      x_var_pointer,                                                              // returns the address of the newly created variable
+                      var_cons_name,                                                              // name
+                      lb,                                                                         // lower bound
+                      ub,                                                                         // upper bound
+                      instance_->stringerCosts[make_tuple(coil_i, mode_i, coil_j, mode_j, line)], // objective function coefficient, this is equal to c_ijkmn. If c_ijkmn is not presented, c_ijkmn is initialized with 0 and 0 is returned, i.e. coefficient is 0
+                      SCIP_VARTYPE_INTEGER);                                                      // variable type
+
+   SCIPaddVar(scipRMP_, *x_var_pointer);
+
+   // (B) original variable constraints
+   // add constraints to orig var constraint
+   SCIPsnprintf(var_cons_name, Settings::kSCIPMaxStringLength, "orig_var_X_CI%d_CJ%d_L%d_MI%d_MJ%d", coil_i, coil_j, line, mode_i, mode_j);
+
+   SCIPcreateConsLinear(scipRMP_,                        // scip
+                        &cons_original_var_X[var_tuple], // cons
+                        var_cons_name,                   // name
+                        0,                               // nvar
+                        0,                               // vars
+                        0,                               // coeffs
+                        0,                               // lhs
+                        0,                               // rhs
+                        TRUE,                            // initial
+                        FALSE,                           // separate
+                        TRUE,                            // enforce
+                        TRUE,                            // check
+                        TRUE,                            // propagate
+                        FALSE,                           // local
+                        TRUE,                            // modifiable
+                        FALSE,                           // dynamic
+                        FALSE,                           // removable
+                        FALSE);                          // stick at nodes
+
+   SCIPaddCoefLinear(scipRMP_, cons_original_var_X[var_tuple], *x_var_pointer, 1);
+   SCIPaddCons(scipRMP_, cons_original_var_X[var_tuple]);
+}
+
 Master::Master(shared_ptr<Instance> instance) : instance_(instance)
 {
    // create a SCIP environment and load all defaults
@@ -25,56 +157,176 @@ Master::Master(shared_ptr<Instance> instance) : instance_(instance)
    SCIPincludeDefaultPlugins(scipRMP_);
 
    // create an empty problem
-   SCIPcreateProb(scipRMP_, "master-problem BPP", 0, 0, 0, 0, 0, 0, 0);
+   SCIPcreateProb(scipRMP_, "master-problem PHALS", 0, 0, 0, 0, 0, 0, 0);
+
+   // set the objective sense to minimize (not mandatory, default is minimize)
+   SCIPsetObjsense(scipRMP_, SCIP_OBJSENSE_MINIMIZE);
 
    // set all optional SCIPParameters
-   setSCIPParameters();
+   this->SetSCIPParameters();
 
    // create Helping-dummy for the name of variables and constraints
    char var_cons_name[255];
 
-   // add variables:
-   // we have currently no variables, cause we are at the beginning of our columnGeneration-Process.
-   _var_lambda.resize(0);
+   // #####################################################################################################################
+   //  Create and add all variables
+   // #####################################################################################################################
 
-   // #####################################################################################
-   // add restrictions with SCIPcreateConsLinear(), it needs to be modifiable:
+   // constant variable
+   SCIPsnprintf(var_cons_name, Settings::kSCIPMaxStringLength, "Const");
+   SCIPcreateVarBasic(scipRMP_,                 //
+                      &var_constant_one_,       // returns the address of the newly created variable
+                      var_cons_name,            // name
+                      1,                        // lower bound
+                      1,                        // upper bound
+                      0,                        // objective function coefficient, equal to 0 according to model
+                      SCIP_VARTYPE_CONTINUOUS); // variable type
 
-   // ###################################################################################
-   // onePatternPerItem
-   // sum(p, lambda_p * a_i^p) = 1 for all i
-   // is equal to:
-   // 1 <= sum(p, lambda_p * a_i^p) <= 1 for all i
-   // a_i^p is the coefficient in the pattern p in row i, i.e. for item i, which we produce by solving our pricing
-   // subproblem
+   SCIPaddVar(scipRMP_, var_constant_one_);
 
-   _cons_onePatternPerItem.resize(_ins->_nbItems);
-
-   for (int i = 0; i < _ins->_nbItems; ++i)
+   for (auto &line : instance_->productionLines)
    {
-      SCIPsnprintf(var_cons_name, 255, "onePatternPerItem_%d", i);
+      for (auto &coil_i : instance_->coilsWithoutEndCoil)
+      {
+         for (auto &coil_j : instance_->coilsWithoutStartCoil)
+         {
+            // if coil_i and coil_j are both sentinel coils, there should be no connection, thus skip this iteration,else, continue
+            if (instance_->IsStartCoil(coil_i) && instance_->IsEndCoil(coil_j))
+            {
+               continue;
+            }
+            // if (coil_i != coil_j)
+            // {
+            // TODO: check this!
+            auto &modes_i = instance_->modes[make_tuple(coil_i, line)];
+            auto &modes_j = instance_->modes[make_tuple(coil_j, line)];
 
-      SCIPcreateConsLinear(scipRMP_,                    // scip
-                           &_cons_onePatternPerItem[i], // cons
-                           var_cons_name,               // name
-                           0,                           // nvar
-                           0,                           // vars
-                           0,                           // coeffs
-                           1,                           // lhs
-                           1,                           // rhs
-                           TRUE,                        // initial
-                           FALSE,                       // separate
-                           TRUE,                        // enforce
-                           TRUE,                        // check
-                           TRUE,                        // propagate
-                           FALSE,                       // local
-                           TRUE,                        // modifiable
-                           FALSE,                       // dynamic
-                           FALSE,                       // removable
-                           FALSE);                      // stick at nodes
+            for (auto &mode_i : modes_i)
+            {
+               for (auto &mode_j : modes_j)
+               {
+                  CreateXVariable(coil_i, coil_j, line, mode_i, mode_j);
+               }
+            }
+         }
+      }
+   }
 
-      // our term is empty, cause we have no Lambdas
-      SCIPaddCons(scipRMP_, _cons_onePatternPerItem[i]);
+   for (auto &coil : instance_->coils)
+   {
+      this->CreateZVariable(coil);
+   }
+
+   // we have currently no lambda, cause we are at the beginning of our columnGeneration-Process.
+
+   // still, original variables need to be added
+
+   // #####################################################################################################################
+   //  Add restrictions
+   // #####################################################################################################################
+
+   // (2) coil partitioning: every regular coil is produced at exactly one line
+   for (auto &coil_i : instance_->regularCoils)
+   {
+      SCIPsnprintf(var_cons_name, Settings::kSCIPMaxStringLength, "coil_partitioning_%d", coil_i);
+
+      SCIPcreateConsLinear(scipRMP_,                         // scip
+                           &cons_coil_partitioning_[coil_i], // cons
+                           var_cons_name,                    // name
+                           0,                                // nvar
+                           0,                                // vars
+                           0,                                // coeffs
+                           1,                                // lhs
+                           1,                                // rhs
+                           TRUE,                             // initial
+                           FALSE,                            // separate
+                           TRUE,                             // enforce
+                           TRUE,                             // check
+                           TRUE,                             // propagate
+                           FALSE,                            // local
+                           TRUE,                             // modifiable
+                           FALSE,                            // dynamic
+                           FALSE,                            // removable
+                           FALSE);                           // stick at nodes
+
+      // add coefficients
+      for (auto &line : instance_->productionLines)
+      {
+         // skip start coil since it may occur at multiple lines
+         for (auto &coil_j : instance_->coilsWithoutStartCoil)
+         {
+            for (auto &mode_i : instance_->modes[make_tuple(coil_i, line)])
+            {
+               for (auto &mode_j : instance_->modes[make_tuple(coil_j, line)])
+               {
+                  auto tuple = make_tuple(coil_i, coil_j, line, mode_i, mode_j);
+                  auto &var_X = vars_X_[make_tuple(coil_i, coil_j, line, mode_i, mode_j)];
+                  SCIPaddCoefLinear(scipRMP_, cons_coil_partitioning_[coil_i], var_X, 1);
+               }
+            }
+         }
+      }
+
+      SCIPaddCons(scipRMP_, cons_coil_partitioning_[coil_i]);
+   }
+
+   // (8) max number of delayed columns
+   SCIPsnprintf(var_cons_name, Settings::kSCIPMaxStringLength, "max_delayed_coils");
+
+   SCIPcreateConsLinear(scipRMP_,                       // scip
+                        &cons_max_delayed_coils_,       // cons
+                        var_cons_name,                  // name
+                        0,                              // nvar
+                        0,                              // vars
+                        0,                              // coeffs
+                        -SCIPinfinity(scipRMP_),        // lhs
+                        instance_->maximumDelayedCoils, // rhs
+                        TRUE,                           // initial
+                        FALSE,                          // separate
+                        TRUE,                           // enforce
+                        TRUE,                           // check
+                        TRUE,                           // propagate
+                        FALSE,                          // local
+                        TRUE,                           // modifiable
+                        FALSE,                          // dynamic
+                        FALSE,                          // removable
+                        FALSE);                         // stick at nodes
+
+   // skip non-regular coils
+   for (auto &coil_i : instance_->regularCoils)
+   {
+      SCIPaddCoefLinear(scipRMP_, cons_max_delayed_coils_, vars_Z_[coil_i], 1);
+   }
+
+   SCIPaddCons(scipRMP_, cons_max_delayed_coils_);
+
+   // (A) convexity constraints
+   for (auto &line : instance_->productionLines)
+   {
+      SCIPsnprintf(var_cons_name, Settings::kSCIPMaxStringLength, "convexity_L%d", line);
+
+      SCIPcreateConsLinear(scipRMP_,                 // scip
+                           &cons_convexity_[line], // cons
+                           var_cons_name,            // name
+                           0,                        // nvar
+                           0,                        // vars
+                           0,                        // coeffs
+                           1,                        // lhs
+                           1,                        // rhs
+                           TRUE,                     // initial
+                           FALSE,                    // separate
+                           TRUE,                     // enforce
+                           TRUE,                     // check
+                           TRUE,                     // propagate
+                           FALSE,                    // local
+                           TRUE,                     // modifiable
+                           FALSE,                    // dynamic
+                           FALSE,                    // removable
+                           FALSE);                   // stick at nodes
+      
+      // no columns yet, so no vars to be added
+
+      SCIPaddCons(scipRMP_, cons_convexity_[line]);
    }
 
    // generate a file to show the LP-Program that is build. "FALSE" = we get our specific choosen names.
@@ -93,17 +345,64 @@ Master::Master(shared_ptr<Instance> instance) : instance_(instance)
 Master::~Master()
 {
 
-   // release variables
-   for (int p = 0; p < _var_lambda.size(); p++)
+   for (auto &[_, cons] : this->cons_convexity_)
    {
-      SCIPreleaseVar(scipRMP_, &_var_lambda[p]);
+      SCIPreleaseCons(scipRMP_, &cons);
    }
+
+   for (auto &[_, cons] : this->cons_coil_partitioning_)
+   {
+      SCIPreleaseCons(scipRMP_, &cons);
+   }
+
+   for (auto &[_, cons] : this->cons_original_var_X)
+   {
+      SCIPreleaseCons(scipRMP_, &cons);
+   }
+
+   for (auto &[_, cons] : this->cons_original_var_Z)
+   {
+      SCIPreleaseCons(scipRMP_, &cons);
+   }
+
+   for (auto &[_, cons] : this->cons_original_var_S)
+   {
+      SCIPreleaseCons(scipRMP_, &cons);
+   }
+
+   SCIPreleaseCons(scipRMP_, &cons_max_delayed_coils_);
+
+   // free variables
+   for (auto &[_, var] : this->vars_X_)
+   {
+      SCIPreleaseVar(scipRMP_, &var);
+   }
+
+   for (auto &[_, var] : this->vars_S_)
+   {
+      SCIPreleaseVar(scipRMP_, &var);
+   }
+
+   for (auto &[_, var] : this->vars_Z_)
+   {
+      SCIPreleaseVar(scipRMP_, &var);
+   }
+
+   for (auto &[_, vars] : this->vars_lambda_)
+   {
+      for (auto &var : vars)
+      {
+         SCIPreleaseVar(scipRMP_, &var);
+      }
+   }
+
+   SCIPreleaseVar(scipRMP_, &var_constant_one_);
 
    SCIPfree(&scipRMP_);
 }
 
 // solve the problem
-void Master::solve()
+void Master::Solve()
 {
    cout << "___________________________________________________________________________________________\n";
    cout << "start Solving ColumnGeneration: \n";
@@ -119,33 +418,6 @@ void Master::solve()
  * this case, NULL), and a Boolean value indicating whether to display the solution in verbose mode (in this case,
  * FALSE). The function does not return any value.
  */
-void Master::displaySolution()
-{
-   SCIPprintBestSol(scipRMP_, NULL, FALSE);
-
-   return; // TODO: fix this bug here
-   // display selected patterns
-   cout << "Selected patterns: " << endl;
-   for (auto pattern_ptr : _Patterns)
-   {
-      auto lambda_value = SCIPgetVarSol(scipRMP_, _var_lambda[pattern_ptr->LambdaPatternIndex]);
-      if (lambda_value > 0.5)
-      { // lambda value is positive, thus included
-         pattern_ptr->display();
-         // count total weight of included items in pattern
-         int total_weight = 0;
-         for (auto item : pattern_ptr->includedItems)
-         {
-            total_weight += _ins->par_w[item];
-         }
-
-         assert(total_weight <= _ins->par_b);
-
-         cout << "Total weight: " << total_weight << endl
-              << endl;
-      }
-   }
-}
 
 /**
  * @brief Set the SCIP parameters
@@ -158,7 +430,7 @@ void Master::displaySolution()
  * while constraints that may not be respected during the pricing process are not added.
  * Finally, constraints are not separated to avoid adding ones that may be violated during the pricing process.
  */
-void Master::setSCIPParameters()
+void Master::SetSCIPParameters()
 {
    // for more information: https://www.scipopt.org/doc/html/PARAMETERS.php
    SCIPsetRealParam(scipRMP_, "limits/time", 1e+20);    // default 1e+20 s
@@ -187,3 +459,75 @@ void Master::setSCIPParameters()
    // no separation to avoid that constraints are added which we cannot respect during the pricing process
    SCIPsetSeparating(scipRMP_, SCIP_PARAMSETTING_OFF, TRUE);
 }
+tuple<bool, Coil, Mode, Mode> Master::FindSucessorCoil(SCIP_Sol *solution, Coil coil_i, ProductionLine line)
+{
+   for (auto &mode_i : instance_->modes[make_tuple(coil_i, line)])
+   {
+      for (auto &coil_j : instance_->coils)
+      {
+         for (auto &mode_j : instance_->modes[make_tuple(coil_j, line)])
+         {
+            auto var_tuple = make_tuple(coil_i, coil_j, line, mode_i, mode_j);
+            // skip variables that don't exist
+            if (vars_X_.count(var_tuple) == 0)
+               continue;
+
+            auto &var = vars_X_[var_tuple];
+            auto var_value = SCIPgetSolVal(scipRMP_, solution, var);
+
+            if (var_value > 0.5)
+            { // TODO: use SCIP epsilon methods
+               return make_tuple(true, coil_j, mode_i, mode_j);
+            }
+         }
+      }
+   }
+
+   return make_tuple(false, 0, 0, 0);
+}
+
+void Master::DisplaySolution()
+{
+   SCIPprintBestSol(scipRMP_, NULL, FALSE);
+
+   SCIP_SOL *solution = SCIPgetBestSol(scipRMP_);
+
+   cout << endl
+        << endl;
+   cout << "==== Coil Assignment ====" << endl;
+   for (auto &line : instance_->productionLines)
+   {
+      cout << "Line " << line << endl;
+      Coil coil_i = instance_->startCoil;
+      auto [found, coil_j, mode_i, mode_j] = FindSucessorCoil(solution, coil_i, line);
+
+      assert(found);
+
+      while (coil_i != instance_->endCoil)
+      {
+         if (coil_i == instance_->startCoil)
+         {
+            cout << "Start";
+         }
+         else
+         {
+            cout << "C" << coil_i << "M" << mode_i;
+            cout << " t=" << SCIPgetSolVal(scipRMP_, solution, vars_S_[coil_i]);
+            if (SCIPgetSolVal(scipRMP_, solution, vars_Z_[coil_i]) > 0.5)
+               cout << " delayed";
+         }
+         cout << " -> ";
+         coil_i = coil_j;
+
+         auto [found_new, coil_j_new, mode_i_new, mode_j_new] = FindSucessorCoil(solution, coil_i, line);
+         found = found_new;
+         coil_j = coil_j_new;
+         mode_i = mode_i_new;
+         mode_j = mode_j_new;
+      }
+
+      cout << "End" << endl;
+
+      cout << "==== Coil Assignment ====" << endl;
+   }
+};

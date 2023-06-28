@@ -1,6 +1,8 @@
 // Master.h
 #pragma once
 
+#include <memory>
+
 #include "../Instance.h"
 
 // scip includes
@@ -8,7 +10,7 @@
 #include "objscip/objscip.h"
 #include "objscip/objscipdefplugins.h"
 
-#include "Pattern.h"
+#include "ProductionLineSchedule.h"
 using namespace scip;
 
 /**
@@ -27,22 +29,29 @@ public:
 
    ~Master(); // destructor
 
-   SCIP *scipRMP_; // pointer to the scip environment for the restricted master-problem
-   Instance *_ins; // pointer to the instance
+   SCIP *scipRMP_;      // pointer to the scip environment for the restricted master-problem
+   shared_ptr<Instance> instance_; // pointer to the instance
 
    // Variables
-   map<ProductionLine, vector<SCIP_VAR*> var_lambda_;
+   map<ProductionLine, vector<SCIP_VAR *>> vars_lambda_;
    map<tuple<Coil, Coil, ProductionLine, Mode, Mode>, SCIP_VAR *> vars_X_;
-   map<Coil, vector<SCIP_VAR*> var_original_Z_;
+   map<Coil, SCIP_VAR *> vars_Z_;
+   map<Coil, SCIP_VAR *> vars_S_;
 
-   vector<ProductionLineSchedule> schedules_;
+   // dummy variable
+   SCIP_VAR *var_constant_one_;
+
+   // column coefficients
+   map<ProductionLine, vector<ProductionLineSchedule>> schedules_;
 
    map<Coil, SCIP_CONS *> cons_convexity_;
    map<Coil, SCIP_CONS *> cons_coil_partitioning_;
    SCIP_CONS *cons_max_delayed_coils_;
-   map<tuple<Coil, Coil, Mode, ProductionLine,Mode, Mode>, SCIP_CONS *> cons_original_variables_X;
-   map<Coil, SCIP_CONS *> cons_original_variables_Z;
-
+   
+   map<tuple<Coil, Coil, ProductionLine, Mode, Mode>, SCIP_CONS *> cons_original_var_X;
+   map<Coil, SCIP_CONS *> cons_original_var_Z;
+   map<Coil, SCIP_CONS *> cons_original_var_S;
+   
    // solve the problem void solve();
    void Solve();
 
@@ -51,4 +60,10 @@ public:
 
    // set all optional SCIP-Parameters
    void SetSCIPParameters();
+
+   void CreateZVariable(Coil coil_i);
+   void CreateSVariable(Coil coil_i);
+   void CreateXVariable(Coil coil_i, Coil coil_j, ProductionLine line, Mode mode_i, Mode mode_j);
+
+   tuple<bool, Coil, Mode, Mode> FindSucessorCoil(SCIP_Sol *solution, Coil coil_i, ProductionLine line);
 };
