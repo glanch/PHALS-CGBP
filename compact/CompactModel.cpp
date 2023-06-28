@@ -118,12 +118,12 @@ CompactModel::CompactModel(shared_ptr<Instance> instance) : instance_(instance)
 
    for (auto &line : instance_->productionLines)
    {
-      for (auto &coil_i : instance_->coils)
+      for (auto &coil_i : instance_->coilsWithoutEndCoil)
       {
-         for (auto &coil_j : instance_->coils)
+         for (auto &coil_j : instance_->coilsWithoutStartCoil)
          {
-            // if coil_i and coil_j are both sentinel coils, coil_i is end coil or coil_j is start coil, skip this iteration, else, continue
-            if ((instance_->IsStartCoil(coil_i) && instance_->IsEndCoil(coil_j)) || instance_->IsEndCoil(coil_i) || instance_->IsStartCoil(coil_j))
+            // if coil_i and coil_j are both sentinel coils, there should be no connection, thus skip this iteration,else, continue
+            if (instance_->IsStartCoil(coil_i) && instance_->IsEndCoil(coil_j))
             {
                continue;
             }
@@ -156,14 +156,8 @@ CompactModel::CompactModel(shared_ptr<Instance> instance) : instance_(instance)
    // #####################################################################################################################
 
    // (2) coil partitioning: every regular coil is produced at exactly one line
-   for (auto &coil_i : instance_->coils)
+   for (auto &coil_i : instance_->regularCoils)
    {
-      // skip sentinel coils
-      if (!instance_->IsRegularCoil(coil_i))
-      {
-         continue;
-      }
-
       SCIPsnprintf(var_cons_name, Settings::kSCIPMaxStringLength, "coil_partitioning_%d", coil_i);
 
       SCIPcreateConsBasicLinear(scip_,                            // scip
@@ -178,14 +172,9 @@ CompactModel::CompactModel(shared_ptr<Instance> instance) : instance_(instance)
       // add coefficients
       for (auto &line : instance_->productionLines)
       {
-         for (auto &coil_j : instance_->coils)
+         // skip start coil since it may occur at multiple lines
+         for (auto &coil_j : instance_->coilsWithoutStartCoil)
          {
-            // skip start coil since they may occur at multiple lines
-            if (instance_->IsStartCoil(coil_j))
-            {
-               continue;
-            }
-
             for (auto &mode_i : instance_->modes[make_tuple(coil_i, line)])
             {
                for (auto &mode_j : instance_->modes[make_tuple(coil_j, line)])
@@ -217,14 +206,10 @@ CompactModel::CompactModel(shared_ptr<Instance> instance) : instance_(instance)
 
       // add coefficients
       Coil coil_i = instance_->startCoil; // this is the start coil
-      for (auto &coil_j : instance_->coils)
-      {
-         // skip sentinel coils
-         if (!instance_->IsRegularCoil(coil_j))
-         {
-            continue;
-         }
-
+      
+      // skip sentinel coils, only regular coils
+      for (auto &coil_j : instance_->regularCoils)
+      {  
          for (auto &mode_i : instance_->modes[make_tuple(coil_i, line)])
          {
             for (auto &mode_j : instance_->modes[make_tuple(coil_j, line)])
@@ -252,14 +237,9 @@ CompactModel::CompactModel(shared_ptr<Instance> instance) : instance_(instance)
 
       // add coefficients
       Coil coil_j = instance_->endCoil; // this is the end coil
-      for (auto &coil_i : instance_->coils)
+      // skip sentinel coils, only regular coils
+      for (auto &coil_i : instance_->regularCoils)
       {
-         // skip sentinel coils
-         if (!instance_->IsRegularCoil(coil_i))
-         {
-            continue;
-         }
-
          for (auto &mode_i : instance_->modes[make_tuple(coil_i, line)])
          {
             for (auto &mode_j : instance_->modes[make_tuple(coil_j, line)])
@@ -276,11 +256,9 @@ CompactModel::CompactModel(shared_ptr<Instance> instance) : instance_(instance)
    // (5) flow conservation: for every line, every coil, and every corresponding mode there is equal amount of incoming and outgoing edges
    for (auto &line : instance_->productionLines)
    {
-      for (auto &coil_j : instance_->coils)
+      // skip sentinel coils, only regular coils
+      for (auto &coil_j : instance_->regularCoils)
       {
-         // skip non-regular coils
-         if (!instance_->IsRegularCoil(coil_j))
-            continue;
 
          auto coil_j_line_tuple = make_tuple(coil_j, line);
          for (auto &mode_j : instance_->modes[coil_j_line_tuple])
@@ -300,12 +278,9 @@ CompactModel::CompactModel(shared_ptr<Instance> instance) : instance_(instance)
             // add coefficients
 
             // positive part of LHS: incoming edges
-            for (auto &coil_i : instance_->coils)
+            // skip end coil and include start coil
+            for (auto &coil_i : instance_->coilsWithoutEndCoil)
             {
-               // skip end coil and inlude start coil
-               if (instance_->IsEndCoil(coil_i))
-                  continue;
-
                for (auto &mode_i : instance_->modes[make_tuple(coil_i, line)])
                {
                   SCIPaddCoefLinear(scip_, cons_flow_conservation_[cons_tuple], vars_X_[make_tuple(coil_i, coil_j, line, mode_i, mode_j)], 1);
@@ -313,9 +288,9 @@ CompactModel::CompactModel(shared_ptr<Instance> instance) : instance_(instance)
             }
 
             // negative part of LHS: outgoing edges
-            for (auto &coil_i : instance_->coils)
+            // skip start coil and include end coil
+            for (auto &coil_i : instance_->coilsWithoutStartCoil)
             {
-               // skip start coil and inlude end coil
                if (instance_->IsStartCoil(coil_i))
                   continue;
 
@@ -331,12 +306,9 @@ CompactModel::CompactModel(shared_ptr<Instance> instance) : instance_(instance)
    }
 
    // (6) delay linking: link Z_i, S_i and X_..
-   for (auto &coil_i : instance_->coils)
+   // skip non-regular coils
+   for (auto &coil_i : instance_->regularCoils)
    {
-      // skip non-regular coils
-      if (!instance_->IsRegularCoil(coil_i))
-         continue;
-
       SCIPsnprintf(var_cons_name, Settings::kSCIPMaxStringLength, "delay_linking_C%d", coil_i);
 
       SCIPcreateConsBasicLinear(scip_,                        // scip
@@ -355,12 +327,9 @@ CompactModel::CompactModel(shared_ptr<Instance> instance) : instance_(instance)
       // other
       for (auto &line : instance_->productionLines)
       {
-         for (auto &coil_j : instance_->coils)
+         // if coil_j is start coil, skip
+         for (auto &coil_j : instance_->coilsWithoutStartCoil)
          {
-            // if coil_j is start coil, skip
-            if (instance_->IsStartCoil(coil_j))
-               continue;
-
             for (auto &mode_j : instance_->modes[make_tuple(coil_j, line)])
             {
                for (auto &mode_i : instance_->modes[make_tuple(coil_i, line)])
@@ -385,13 +354,11 @@ CompactModel::CompactModel(shared_ptr<Instance> instance) : instance_(instance)
    }
 
    // (7) start time linking: link S_i and X_..
-   for (auto &coil_i : instance_->coils)
+   // skip non-regular coils for both coil_i and coil_j
+   for (auto &coil_i : instance_->regularCoils)
    {
-      for (auto &coil_j : instance_->coils)
+      for (auto &coil_j : instance_->regularCoils)
       {
-         // skip non-regular coils
-         if (!instance_->IsRegularCoil(coil_i) || !instance_->IsRegularCoil(coil_j))
-            continue;
 
          auto con_tuple = make_tuple(coil_i, coil_j);
 
@@ -450,12 +417,9 @@ CompactModel::CompactModel(shared_ptr<Instance> instance) : instance_(instance)
                              0,                               // coeffs
                              -SCIPinfinity(scip_),            // lhs
                              instance_->maximumDelayedCoils); // rhs
-   for (auto &coil_i : instance_->coils)
+   // skip non-regular coils
+   for (auto &coil_i : instance_->regularCoils)
    {
-      // scip non-regular coils
-      if (!instance_->IsRegularCoil(coil_i))
-         continue;
-
       SCIPaddCoefLinear(scip_, cons_max_delayed_coils_, vars_Z_[coil_i], 1);
    }
 
@@ -577,6 +541,7 @@ tuple<bool, Coil, Mode, Mode> CompactModel::FindSucessorCoil(SCIP_Sol *solution,
          for (auto &mode_j : instance_->modes[make_tuple(coil_j, line)])
          {
             auto var_tuple = make_tuple(coil_i, coil_j, line, mode_i, mode_j);
+            // skip variables that don't exist
             if (vars_X_.count(var_tuple) == 0)
                continue;
 
