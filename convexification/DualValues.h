@@ -1,8 +1,8 @@
 
-class DualVariables
+class DualValues
 {
 public:
-    DualVariables(shared_ptr<Instance> instance) : instance_(instance) {}
+    DualValues(shared_ptr<Instance> instance) : instance_(instance) {}
 
 private:
     shared_ptr<Instance> instance_;

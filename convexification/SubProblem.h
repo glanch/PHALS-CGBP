@@ -6,8 +6,8 @@
 class SubProblem
 {
 public:
-    SubProblem(shared_ptr<Instance> instance, ProductionLine line);
-
+    SubProblem();
+    void Setup(shared_ptr<Instance> instance, ProductionLine line);
 private:
     ProductionLine line_;
 
@@ -16,4 +16,5 @@ private:
     map<tuple<Coil, Mode>, SCIP_CONS *> cons_flow_conservation_;
     map<Coil, SCIP_CONS *> cons_delay_linking_;
     map<tuple<Coil, Coil>, SCIP_CONS *> cons_start_time_linking_;
+    
 }
