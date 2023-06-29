@@ -72,14 +72,14 @@ SCIP_RETCODE MyPricer::scip_init(SCIP *scip, SCIP_PRICER *pricer)
     SCIPgetTransformedCons(scipRMP_, master_problem_->cons_coil_partitioning_[tuple], &(master_problem_->cons_coil_partitioning_[tuple]));
   }
 
+  // max delayed constraint
+  SCIPgetTransformedCons(scipRMP_, master_problem_->cons_max_delayed_coils_, &master_problem_->cons_max_delayed_coils_);
+
   // convexity constraints
   for (auto &[tuple, _] : master_problem_->cons_convexity_)
   {
     SCIPgetTransformedCons(scipRMP_, master_problem_->cons_convexity_[tuple], &(master_problem_->cons_convexity_[tuple]));
   }
-
-  // max delayed constraint
-  SCIPgetTransformedCons(scipRMP_, master_problem_->cons_max_delayed_coils_, &master_problem_->cons_max_delayed_coils_);
 
   // original variable restoring
   // X
@@ -145,8 +145,10 @@ SCIP_RESULT MyPricer::Pricing(const bool is_farkas)
     auto subproblem_solution = subproblem.Solve();
 
     // add variable if it could happen that selecting it improves the objective
-    if (subproblem_solution->reduced_cost_negative)
+    if (subproblem_solution->reduced_cost_negative) {
+      DisplaySchedule(subproblem_solution);
       AddNewVar(subproblem_solution);
+    }
   }
 
   // TODO: check this
@@ -320,7 +322,7 @@ void MyPricer::AddNewVar(shared_ptr<ProductionLineSchedule> schedule)
  * and newly generated packing pattern costs. It then iterates through the PatternIncidence boolean vector and prints the
  * indices where the value is true, thus displaying whether an item is part of the new pattern.
  */
-void DisplaySchedule(shared_ptr<ProductionLineSchedule> column)
+void MyPricer::DisplaySchedule(shared_ptr<ProductionLineSchedule> column)
 {
   cout << "Schedule / new column" << endl
        << "\tLine L" << column->line << endl
