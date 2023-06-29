@@ -33,6 +33,7 @@ private:
     map<Coil, SCIP_CONS *> cons_delay_linking_;
     map<tuple<Coil, Coil>, SCIP_CONS *> cons_start_time_linking_;
 
+    int iteration_ = 0;
     void CreateZVariable(Coil coil_i);
     void CreateSVariable(Coil coil_i);
     void CreateXVariable(Coil coil_i, Coil coil_j, ProductionLine line, Mode mode_i, Mode mode_j);

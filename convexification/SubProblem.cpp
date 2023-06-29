@@ -446,8 +446,9 @@ void SubProblem::UpdateObjective(shared_ptr<DualValues> dual_values, const bool 
 
 shared_ptr<ProductionLineSchedule> SubProblem::Solve()
 {
+
   char model_name[Settings::kSCIPMaxStringLength];
-  (void)SCIPsnprintf(model_name, Settings::kSCIPMaxStringLength, "SubProblem_L%d.lp", line_);
+  (void)SCIPsnprintf(model_name, Settings::kSCIPMaxStringLength, "SubProblems/SubProblem_L%d_%d.lp", line_, iteration_);
 
   // write out to disk
   SCIPwriteOrigProblem(scipSP_, model_name, "lp", FALSE);
@@ -458,6 +459,9 @@ shared_ptr<ProductionLineSchedule> SubProblem::Solve()
   // restore solution
   // allocate memory for schedule / column
   auto schedule = make_shared<ProductionLineSchedule>();
+
+  // set line
+  schedule->line = line_;
 
   // get best solution
   SCIP_SOL *scip_solution = SCIPgetBestSol(scipSP_);
@@ -515,5 +519,6 @@ shared_ptr<ProductionLineSchedule> SubProblem::Solve()
     schedule->delayedness[coil_i] = coil_delayed;
   }
 
+  iteration_++;
   return schedule;
 }
