@@ -166,7 +166,7 @@ Master::Master(shared_ptr<Instance> instance) : instance_(instance)
    this->SetSCIPParameters();
 
    // create Helping-dummy for the name of variables and constraints
-   char var_cons_name[255];
+   char var_cons_name[Settings::kSCIPMaxStringLength];
 
    // #####################################################################################################################
    //  Create and add all variables

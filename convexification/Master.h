@@ -32,6 +32,9 @@ public:
    SCIP *scipRMP_;      // pointer to the scip environment for the restricted master-problem
    shared_ptr<Instance> instance_; // pointer to the instance
 
+   // Schedules, column coefficients
+   map<ProductionLine, vector<shared_ptr<ProductionLineSchedule>>> schedules_; // TODO: refactor into one combined map with lambda vars
+   
    // Variables
    map<ProductionLine, vector<SCIP_VAR *>> vars_lambda_;
    map<tuple<Coil, Coil, ProductionLine, Mode, Mode>, SCIP_VAR *> vars_X_;
@@ -41,8 +44,6 @@ public:
    // dummy variable
    SCIP_VAR *var_constant_one_;
 
-   // column coefficients
-   map<ProductionLine, vector<ProductionLineSchedule>> schedules_;
 
    map<Coil, SCIP_CONS *> cons_convexity_;
    map<Coil, SCIP_CONS *> cons_coil_partitioning_;
