@@ -5,7 +5,7 @@
 int main()
 {
    auto instance = make_shared<Instance>();
-   instance->read("../data/Ins_4.cal");
+   instance->read("../data/Ins_20.cal");
 
    // auto compact_model = make_unique<CompactModel>(instance);
 

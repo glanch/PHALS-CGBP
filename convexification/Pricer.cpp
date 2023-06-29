@@ -138,6 +138,22 @@ SCIP_RESULT MyPricer::Pricing(const bool is_farkas)
   dual_values_->pi_max_delayed_coils_ = is_farkas ? SCIPgetDualfarkasLinear(scipRMP_, master_problem_->cons_max_delayed_coils_)
                                                   : SCIPgetDualsolLinear(scipRMP_, master_problem_->cons_max_delayed_coils_);
 
+
+  // original variables constraint
+  // X
+  for (auto &[tuple, cons] : master_problem_->cons_original_var_X)
+  {
+    dual_values_->pi_original_var_X[tuple] = is_farkas ? SCIPgetDualfarkasLinear(scipRMP_, cons)
+                                                     : SCIPgetDualsolLinear(scipRMP_, cons);
+  }
+  
+  // Z
+  for (auto &[coil, cons] : master_problem_->cons_original_var_Z)
+  {
+    dual_values_->pi_original_var_Z[coil] = is_farkas ? SCIPgetDualfarkasLinear(scipRMP_, cons)
+                                                     : SCIPgetDualsolLinear(scipRMP_, cons);
+  }
+
   // Update objective function of and solve all subproblems
   for (auto &[line, subproblem] : this->subproblems_)
   {
@@ -279,7 +295,7 @@ void MyPricer::AddNewVar(shared_ptr<ProductionLineSchedule> schedule)
 
       // TODO: decide whether to add to constraint if incidence == false
       SCIP_Real column_coefficient = incidence ? 1 : 0;
-      SCIPaddCoefLinear(scipRMP_, master_problem_->cons_original_var_X[tuple], new_variable, column_coefficient);
+      SCIPaddCoefLinear(scipRMP_, master_problem_->cons_coil_partitioning_[coil_i], new_variable, column_coefficient);
     }
   }
 
@@ -300,7 +316,7 @@ void MyPricer::AddNewVar(shared_ptr<ProductionLineSchedule> schedule)
   {
     // TODO: decide whether to add to constraint if incidence == false
     SCIP_Real column_coefficient = incidence ? 1 : 0;
-    SCIPaddCoefLinear(scipRMP_, master_problem_->cons_original_var_X[tuple], new_variable, column_coefficient);
+    SCIPaddCoefLinear(scipRMP_, master_problem_->cons_original_var_X[tuple], new_variable, -column_coefficient);
   }
 
   // var Z
@@ -308,7 +324,7 @@ void MyPricer::AddNewVar(shared_ptr<ProductionLineSchedule> schedule)
   {
     // TODO: decide whether to add if incidence == false
     SCIP_Real column_coefficient = delayed ? 1 : 0;
-    SCIPaddCoefLinear(scipRMP_, master_problem_->cons_original_var_Z[coil], new_variable, column_coefficient);
+    SCIPaddCoefLinear(scipRMP_, master_problem_->cons_original_var_Z[coil], new_variable, -column_coefficient);
   }
 
   char model_name[Settings::kSCIPMaxStringLength];

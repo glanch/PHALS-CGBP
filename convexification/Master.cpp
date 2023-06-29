@@ -13,13 +13,20 @@ void Master::CreateZVariable(Coil coil_i)
 
    SCIP_VAR **z_var_pointer = &vars_Z_[coil_i];
    SCIPsnprintf(var_cons_name, Settings::kSCIPMaxStringLength, "Z_C%d", coil_i);
-   SCIPcreateVarBasic(scipRMP_,              //
-                      z_var_pointer,         // returns the address of the newly created variable
-                      var_cons_name,         // name
-                      0,                     // lower bound
-                      1,                     // upper bound
-                      0,                     // objective function coefficient, equal to 0 according to model
-                      SCIP_VARTYPE_INTEGER); // variable type
+   SCIPcreateVar(scipRMP_,             //
+                 z_var_pointer,        // returns the address of the newly created variable
+                 var_cons_name,        // name
+                 0,                    // lower bound
+                 1,                    // upper bound
+                 0,                    // objective function coefficient, equal to 0 according to model
+                 SCIP_VARTYPE_INTEGER, // variable type
+                 true,
+                 false,
+                 NULL,
+                 NULL,
+                 NULL,
+                 NULL,
+                 NULL);
 
    SCIPaddVar(scipRMP_, *z_var_pointer);
 
@@ -64,13 +71,20 @@ void Master::CreateSVariable(Coil coil_i)
 
    SCIP_VAR **s_var_pointer = &vars_S_[coil_i];
    SCIPsnprintf(var_cons_name, Settings::kSCIPMaxStringLength, "S_C%d", coil_i);
-   SCIPcreateVarBasic(scipRMP_,                 //
-                      s_var_pointer,            // returns the address of the newly created variable
-                      var_cons_name,            // name
-                      lb,                       // lower bound, see above
-                      ub,                       // upper bound, see above
-                      0,                        // objective function coefficient, equal to 0 according to model
-                      SCIP_VARTYPE_CONTINUOUS); // variable type
+   SCIPcreateVar(scipRMP_,                //
+                 s_var_pointer,           // returns the address of the newly created variable
+                 var_cons_name,           // name
+                 lb,                      // lower bound, see above
+                 ub,                      // upper bound, see above
+                 0,                       // objective function coefficient, equal to 0 according to model
+                 SCIP_VARTYPE_CONTINUOUS, // variable type
+                 true,
+                 false,
+                 NULL,
+                 NULL,
+                 NULL,
+                 NULL,
+                 NULL);
 
    SCIPaddVar(scipRMP_, *s_var_pointer);
 
@@ -113,13 +127,20 @@ void Master::CreateXVariable(Coil coil_i, Coil coil_j, ProductionLine line, Mode
    assert(vars_X_.count(var_tuple) == 0);
    SCIP_VAR **x_var_pointer = &vars_X_[var_tuple];
    SCIPsnprintf(var_cons_name, Settings::kSCIPMaxStringLength, "X_CI%d_CJ%d_L%d_MI%d_MJ%d", coil_i, coil_j, line, mode_i, mode_j);
-   SCIPcreateVarBasic(scipRMP_,              //
-                      x_var_pointer,         // returns the address of the newly created variable
-                      var_cons_name,         // name
-                      lb,                    // lower bound
-                      ub,                    // upper bound
-                      0,                     // objective function coefficient, this is equal to zero since only lambda variables occur
-                      SCIP_VARTYPE_INTEGER); // variable type
+   SCIPcreateVar(scipRMP_,             //
+                 x_var_pointer,        // returns the address of the newly created variable
+                 var_cons_name,        // name
+                 lb,                   // lower bound
+                 ub,                   // upper bound
+                 0,                    // objective function coefficient, this is equal to zero since only lambda variables occur
+                 SCIP_VARTYPE_INTEGER, // variable type
+                 true,
+                 false,
+                 NULL,
+                 NULL,
+                 NULL,
+                 NULL,
+                 NULL);
 
    SCIPaddVar(scipRMP_, *x_var_pointer);
 
@@ -174,13 +195,20 @@ Master::Master(shared_ptr<Instance> instance) : instance_(instance)
 
    // constant variable
    SCIPsnprintf(var_cons_name, Settings::kSCIPMaxStringLength, "Const");
-   SCIPcreateVarBasic(scipRMP_,                 //
-                      &var_constant_one_,       // returns the address of the newly created variable
-                      var_cons_name,            // name
-                      1,                        // lower bound
-                      1,                        // upper bound
-                      0,                        // objective function coefficient, equal to 0 according to model
-                      SCIP_VARTYPE_CONTINUOUS); // variable type
+   SCIPcreateVar(scipRMP_,           //
+                 &var_constant_one_, // returns the address of the newly created variable
+                 var_cons_name,      // name
+                 1,                  // lower bound
+                 1,                  // upper bound
+                 0,                  // objective function coefficient, equal to 0 according to model
+                 SCIP_VARTYPE_CONTINUOUS,
+                 true,
+                 false,
+                 NULL,
+                 NULL,
+                 NULL,
+                 NULL,
+                 NULL);
 
    SCIPaddVar(scipRMP_, var_constant_one_);
 
@@ -249,23 +277,7 @@ Master::Master(shared_ptr<Instance> instance) : instance_(instance)
                            FALSE,                            // removable
                            FALSE);                           // stick at nodes
 
-      // add coefficients
-      for (auto &line : instance_->productionLines)
-      {
-         // skip start coil since it may occur at multiple lines
-         for (auto &coil_j : instance_->coilsWithoutStartCoil)
-         {
-            for (auto &mode_i : instance_->modes[make_tuple(coil_i, line)])
-            {
-               for (auto &mode_j : instance_->modes[make_tuple(coil_j, line)])
-               {
-                  auto tuple = make_tuple(coil_i, coil_j, line, mode_i, mode_j);
-                  auto &var_X = vars_X_[make_tuple(coil_i, coil_j, line, mode_i, mode_j)];
-                  SCIPaddCoefLinear(scipRMP_, cons_coil_partitioning_[coil_i], var_X, 1);
-               }
-            }
-         }
-      }
+      // no coefficients here since no columns generated yet
 
       SCIPaddCons(scipRMP_, cons_coil_partitioning_[coil_i]);
    }
@@ -292,11 +304,7 @@ Master::Master(shared_ptr<Instance> instance) : instance_(instance)
                         FALSE,                          // removable
                         FALSE);                         // stick at nodes
 
-   // skip non-regular coils
-   for (auto &coil_i : instance_->regularCoils)
-   {
-      SCIPaddCoefLinear(scipRMP_, cons_max_delayed_coils_, vars_Z_[coil_i], 1);
-   }
+   // no coefficients here since no columns generated yet
 
    SCIPaddCons(scipRMP_, cons_max_delayed_coils_);
 
@@ -512,7 +520,7 @@ void Master::DisplaySolution()
          else
          {
             cout << "C" << coil_i << "M" << mode_i;
-            cout << " t=" << SCIPgetSolVal(scipRMP_, solution, vars_S_[coil_i]);
+            // cout << " t=" << SCIPgetSolVal(scipRMP_, solution, vars_S_[coil_i]);
             if (SCIPgetSolVal(scipRMP_, solution, vars_Z_[coil_i]) > 0.5)
                cout << " delayed";
          }

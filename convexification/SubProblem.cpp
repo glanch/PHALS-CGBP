@@ -14,7 +14,7 @@ void SubProblem::CreateZVariable(Coil coil_i)
 
   SCIP_VAR **z_var_pointer = &vars_Z_[coil_i];
   SCIPsnprintf(var_cons_name, Settings::kSCIPMaxStringLength, "Z_C%d", coil_i);
-  SCIPcreateVarBasic(scipSP_,                 //
+  SCIPcreateVarBasic(scipSP_,               //
                      z_var_pointer,         // returns the address of the newly created variable
                      var_cons_name,         // name
                      0,                     // lower bound
@@ -39,7 +39,7 @@ void SubProblem::CreateSVariable(Coil coil_i)
 
   SCIP_VAR **s_var_pointer = &vars_S_[coil_i];
   SCIPsnprintf(var_cons_name, Settings::kSCIPMaxStringLength, "S_C%d", coil_i);
-  SCIPcreateVarBasic(scipSP_,                    //
+  SCIPcreateVarBasic(scipSP_,                  //
                      s_var_pointer,            // returns the address of the newly created variable
                      var_cons_name,            // name
                      lb,                       // lower bound, see above
@@ -62,7 +62,7 @@ void SubProblem::CreateXVariable(Coil coil_i, Coil coil_j, ProductionLine line, 
   assert(vars_X_.count(var_tuple) == 0);
   SCIP_VAR **x_var_pointer = &vars_X_[var_tuple];
   SCIPsnprintf(var_cons_name, Settings::kSCIPMaxStringLength, "X_CI%d_CJ%d_L%d_MI%d_MJ%d", coil_i, coil_j, line, mode_i, mode_j);
-  SCIPcreateVarBasic(scipSP_,                 //
+  SCIPcreateVarBasic(scipSP_,               //
                      x_var_pointer,         // returns the address of the newly created variable
                      var_cons_name,         // name
                      lb,                    // lower bound
@@ -102,7 +102,7 @@ void SubProblem::Setup(shared_ptr<Instance> instance, ProductionLine line)
 
   // constant variable
   SCIPsnprintf(var_cons_name, Settings::kSCIPMaxStringLength, "Const");
-  SCIPcreateVarBasic(scipSP_,                    //
+  SCIPcreateVarBasic(scipSP_,                  //
                      &var_constant_one_,       // returns the address of the newly created variable
                      var_cons_name,            // name
                      1,                        // lower bound
@@ -151,7 +151,7 @@ void SubProblem::Setup(shared_ptr<Instance> instance, ProductionLine line)
   // (3) production line start: every line (this) has exactly one successor of starting coil
   SCIPsnprintf(var_cons_name, Settings::kSCIPMaxStringLength, "production_line_start");
 
-  SCIPcreateConsBasicLinear(scipSP_,                        // scip
+  SCIPcreateConsBasicLinear(scipSP_,                      // scip
                             &cons_production_line_start_, // cons
                             var_cons_name,                // name
                             0,                            // nvar
@@ -179,7 +179,7 @@ void SubProblem::Setup(shared_ptr<Instance> instance, ProductionLine line)
   // (4) production line end: every line has exactly one predecessor of end coil
   SCIPsnprintf(var_cons_name, Settings::kSCIPMaxStringLength, "production_line_end");
 
-  SCIPcreateConsBasicLinear(scipSP_,                      // scip
+  SCIPcreateConsBasicLinear(scipSP_,                    // scip
                             &cons_production_line_end_, // cons
                             var_cons_name,              // name
                             0,                          // nvar
@@ -217,7 +217,7 @@ void SubProblem::Setup(shared_ptr<Instance> instance, ProductionLine line)
       auto cons_tuple = make_tuple(coil_j, mode_j);
       SCIPsnprintf(var_cons_name, Settings::kSCIPMaxStringLength, "cons_flow_conservation_C%d_M%d", coil_j, mode_j);
 
-      SCIPcreateConsBasicLinear(scipSP_,                                // scip
+      SCIPcreateConsBasicLinear(scipSP_,                              // scip
                                 &cons_flow_conservation_[cons_tuple], // cons
                                 var_cons_name,                        // name
                                 0,                                    // nvar
@@ -261,13 +261,13 @@ void SubProblem::Setup(shared_ptr<Instance> instance, ProductionLine line)
   {
     SCIPsnprintf(var_cons_name, Settings::kSCIPMaxStringLength, "delay_linking_C%d", coil_i);
 
-    SCIPcreateConsBasicLinear(scipSP_,                        // scip
+    SCIPcreateConsBasicLinear(scipSP_,                      // scip
                               &cons_delay_linking_[coil_i], // cons
                               var_cons_name,                // name
                               0,                            // nvar
                               0,                            // vars
                               0,                            // coeffs
-                              -SCIPinfinity(scipSP_),         // lhs
+                              -SCIPinfinity(scipSP_),       // lhs
                               0);                           // rhs
 
     // add coefficients
@@ -311,13 +311,13 @@ void SubProblem::Setup(shared_ptr<Instance> instance, ProductionLine line)
 
       SCIPsnprintf(var_cons_name, Settings::kSCIPMaxStringLength, "start_time_linking_CI%d_CJ%d", coil_i, coil_j);
 
-      SCIPcreateConsBasicLinear(scipSP_,                                // scip
+      SCIPcreateConsBasicLinear(scipSP_,                              // scip
                                 &cons_start_time_linking_[con_tuple], // cons
                                 var_cons_name,                        // name
                                 0,                                    // nvar
                                 0,                                    // vars
                                 0,                                    // coeffs
-                                -SCIPinfinity(scipSP_),                 // lhs
+                                -SCIPinfinity(scipSP_),               // lhs
                                 0);                                   // rhs
 
       // add coefficients
@@ -348,6 +348,25 @@ void SubProblem::Setup(shared_ptr<Instance> instance, ProductionLine line)
       SCIPaddCons(scipSP_, cons_start_time_linking_[con_tuple]);
     }
   }
+
+  // (8) max number of delayed columns
+  SCIPsnprintf(var_cons_name, Settings::kSCIPMaxStringLength, "max_delayed_coils");
+
+  SCIPcreateConsBasicLinear(scipSP_,                         // scip
+                            &cons_max_delayed_coils_,        // cons
+                            var_cons_name,                   // name
+                            0,                               // nvar
+                            0,                               // vars
+                            0,                               // coeffs
+                            -SCIPinfinity(scipSP_),          // lhs
+                            instance_->maximumDelayedCoils); // rhs
+  // skip non-regular coils
+  for (auto &coil_i : instance_->regularCoils)
+  {
+    SCIPaddCoefLinear(scipSP_, cons_max_delayed_coils_, vars_Z_[coil_i], 1);
+  }
+
+  SCIPaddCons(scipSP_, cons_max_delayed_coils_);
 }
 // destructor
 SubProblem::~SubProblem()
@@ -398,7 +417,9 @@ void SubProblem::UpdateObjective(shared_ptr<DualValues> dual_values, const bool 
   // Z variables
   for (auto coil_i : instance_->coils)
   {
-    SCIPchgVarObj(scipSP_, vars_Z_[coil_i], -dual_values->pi_max_delayed_coils_);
+    // both delay coils constraint and original variable constraint duals need to be respected here
+    // but only if coil_i is a regular coil, if not, don't consider dual of max delay constraint
+    SCIPchgVarObj(scipSP_, vars_Z_[coil_i], -((instance_->IsRegularCoil(coil_i) ? dual_values->pi_max_delayed_coils_ : 0) + dual_values->pi_original_var_Z[coil_i]));
   }
 
   // S variables don't occur in the MP, so no coefficients in reduced cost term
@@ -413,31 +434,30 @@ void SubProblem::UpdateObjective(shared_ptr<DualValues> dual_values, const bool 
 
     SCIP_Real column_cost = 0;
     SCIP_Real dual_cost = 0;
+    SCIP_Real original_var_cost = dual_values->pi_original_var_X[tuple];
 
-    // skip cost if coil_i is non-regular since such variables do not occur at objective nor at coil partitioning constraint
-    if (!instance_->IsRegularCoil(coil_i))
+    // skip rest of cost if coil_i is non-regular since such variables do not occur at objective nor at coil partitioning constraint, only at original variable restore constraint
+    if (instance_->IsRegularCoil(coil_i))
     {
-      continue;
+
+      // set dual cost because coil_i always occurs in coil partitioning constraint
+      dual_cost = dual_values->pi_partitioning_[coil_i];
+
+      // don't add column cost if coil_j is end coil since end coil only occurs at coil partitioning constraint
+      if (instance_->IsEndCoil(coil_j))
+      {
+        column_cost = 0;
+      }
+      else
+      {
+        column_cost = instance_->stringerCosts[make_tuple(coil_i, mode_i, coil_j, mode_j, line)];
+      }
+
+      // if we are doing Farkas pricing, don't use column cost in objective at all
+      if (is_farkas)
+        column_cost = 0;
     }
-
-    // set dual cost because coil_i always occurs in coil partitioning constraint
-    dual_cost = dual_values->pi_partitioning_[coil_i];
-
-    // don't add column cost if coil_j is end coil since end coil only occurs at coil partitioning constraint
-    if (instance_->IsEndCoil(coil_j))
-    {
-      column_cost = 0;
-    }
-    else
-    {
-      column_cost = instance_->stringerCosts[make_tuple(coil_i, mode_i, coil_j, mode_j, line)];
-    }
-
-    // if we are doing Farkas pricing, don't use column cost in objective at all
-    if (is_farkas)
-      column_cost = 0;
-
-    SCIPchgVarObj(scipSP_, var_X, column_cost - dual_cost);
+    SCIPchgVarObj(scipSP_, var_X, column_cost - dual_cost - original_var_cost);
   }
 
   // convexity constraint for this line

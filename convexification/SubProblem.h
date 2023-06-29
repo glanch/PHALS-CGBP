@@ -33,6 +33,8 @@ private:
     map<Coil, SCIP_CONS *> cons_delay_linking_;
     map<tuple<Coil, Coil>, SCIP_CONS *> cons_start_time_linking_;
 
+    SCIP_CONS* cons_max_delayed_coils_;
+    
     int iteration_ = 0;
     void CreateZVariable(Coil coil_i);
     void CreateSVariable(Coil coil_i);
