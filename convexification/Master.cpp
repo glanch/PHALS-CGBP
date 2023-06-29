@@ -113,13 +113,13 @@ void Master::CreateXVariable(Coil coil_i, Coil coil_j, ProductionLine line, Mode
    assert(vars_X_.count(var_tuple) == 0);
    SCIP_VAR **x_var_pointer = &vars_X_[var_tuple];
    SCIPsnprintf(var_cons_name, Settings::kSCIPMaxStringLength, "X_CI%d_CJ%d_L%d_MI%d_MJ%d", coil_i, coil_j, line, mode_i, mode_j);
-   SCIPcreateVarBasic(scipRMP_,                                                                   //
-                      x_var_pointer,                                                              // returns the address of the newly created variable
-                      var_cons_name,                                                              // name
-                      lb,                                                                         // lower bound
-                      ub,                                                                         // upper bound
-                      instance_->stringerCosts[make_tuple(coil_i, mode_i, coil_j, mode_j, line)], // objective function coefficient, this is equal to c_ijkmn. If c_ijkmn is not presented, c_ijkmn is initialized with 0 and 0 is returned, i.e. coefficient is 0
-                      SCIP_VARTYPE_INTEGER);                                                      // variable type
+   SCIPcreateVarBasic(scipRMP_,              //
+                      x_var_pointer,         // returns the address of the newly created variable
+                      var_cons_name,         // name
+                      lb,                    // lower bound
+                      ub,                    // upper bound
+                      0,                     // objective function coefficient, this is equal to zero since only lambda variables occur
+                      SCIP_VARTYPE_INTEGER); // variable type
 
    SCIPaddVar(scipRMP_, *x_var_pointer);
 
@@ -305,25 +305,25 @@ Master::Master(shared_ptr<Instance> instance) : instance_(instance)
    {
       SCIPsnprintf(var_cons_name, Settings::kSCIPMaxStringLength, "convexity_L%d", line);
 
-      SCIPcreateConsLinear(scipRMP_,                 // scip
+      SCIPcreateConsLinear(scipRMP_,               // scip
                            &cons_convexity_[line], // cons
-                           var_cons_name,            // name
-                           0,                        // nvar
-                           0,                        // vars
-                           0,                        // coeffs
-                           1,                        // lhs
-                           1,                        // rhs
-                           TRUE,                     // initial
-                           FALSE,                    // separate
-                           TRUE,                     // enforce
-                           TRUE,                     // check
-                           TRUE,                     // propagate
-                           FALSE,                    // local
-                           TRUE,                     // modifiable
-                           FALSE,                    // dynamic
-                           FALSE,                    // removable
-                           FALSE);                   // stick at nodes
-      
+                           var_cons_name,          // name
+                           0,                      // nvar
+                           0,                      // vars
+                           0,                      // coeffs
+                           1,                      // lhs
+                           1,                      // rhs
+                           TRUE,                   // initial
+                           FALSE,                  // separate
+                           TRUE,                   // enforce
+                           TRUE,                   // check
+                           TRUE,                   // propagate
+                           FALSE,                  // local
+                           TRUE,                   // modifiable
+                           FALSE,                  // dynamic
+                           FALSE,                  // removable
+                           FALSE);                 // stick at nodes
+
       // no columns yet, so no vars to be added
 
       SCIPaddCons(scipRMP_, cons_convexity_[line]);
