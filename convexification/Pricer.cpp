@@ -310,7 +310,7 @@ void MyPricer::AddNewVar(shared_ptr<ProductionLineSchedule> schedule)
   }
 
   char model_name[Settings::kSCIPMaxStringLength];
-  (void)SCIPsnprintf(model_name, Settings::kSCIPMaxStringLength, "TransMasterProblems/TransMaster_%d_%d.lp", lambda_index);
+  (void)SCIPsnprintf(model_name, Settings::kSCIPMaxStringLength, "TransMasterProblems/TransMaster_%d_%d.lp", schedule->line, lambda_index);
   SCIPwriteTransProblem(scipRMP_, model_name, "lp", FALSE);
 }
 /** @brief
