@@ -11,6 +11,9 @@ enable_testing()
 add_executable(PHALS
     main.cpp
     compact/CompactModel.cpp
+    convexification/Master.cpp
+    convexification/Pricer.cpp
+    convexification/SubProblem.cpp
     Instance.cpp
 )
 
