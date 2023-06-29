@@ -10,12 +10,12 @@
 #include "objscip/objscip.h"
 #include "objscip/objscipdefplugins.h"
 
-#include "Instance.h"
+#include "../Instance.h"
 #include "Master.h"
 
 #include "SubProblem.h"
 
-#include "Pattern.h"
+#include "ProductionLineSchedule.h"
 
 using namespace std;
 using namespace scip;
@@ -57,21 +57,13 @@ public:
    virtual SCIP_RETCODE scip_farkas(SCIP *scip, SCIP_PRICER *pricer, SCIP_RESULT *result) override;
 
    // perform pricing for dual and farkas combined with flag isFarkas
-   SCIP_RESULT pricing(const bool is_farkas);
+   SCIP_RESULT Pricing(const bool is_farkas);
 
 private:
    // to add the new column, i.e., the stable set, to the master problem
-   void AddNewVar(ProductionLineSchedule *column);
+   void AddNewVar(shared_ptr<ProductionLineSchedule> column);
 
-   void DisplaySchedule(ProductionLineSchedule *column);
+   void DisplaySchedule(shared_ptr<ProductionLineSchedule> column);
 
-   shared_ptr<DualValues> dual_variables_; // Pointer to the values of the dual variables for the current iteration of the ColumnGeneration
-
-   // variables
-   vector<SCIP_VAR *> _vars_X_; // X_i: if item i is part of pattern
-   SCIP_VAR *_var_cost_const;   // dummy-variable to consider a constant term in the Objective-Function
-
-   // constraints
-   SCIP_CONS *_con_capacity;   // (13): bin capacity b is not exceeded by packing item X_i
-   SCIP_CONS *_con_cost_const; // dummy-constraint to force cost_const var to exactly 1
+   shared_ptr<DualValues> dual_values_; // Pointer to the values of the dual variables for the current iteration of the ColumnGeneration
 };
