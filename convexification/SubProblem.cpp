@@ -431,7 +431,7 @@ void SubProblem::UpdateObjective(shared_ptr<DualValues> dual_values, const bool 
   {
     // both delay coils constraint and original variable constraint duals need to be respected here
     // but only if coil_i is a regular coil, if not, don't consider dual of max delay constraint
-    SCIPchgVarObj(scipSP_, vars_Z_[coil_i], -((instance_->IsRegularCoil(coil_i) ? dual_values->pi_max_delayed_coils_ : 0) + dual_values->pi_original_var_Z[coil_i]));
+    SCIPchgVarObj(scipSP_, vars_Z_[coil_i], -(instance_->IsRegularCoil(coil_i) ? dual_values->pi_max_delayed_coils_ : 0) + dual_values->pi_original_var_Z[coil_i]);
   }
 
   // S variables don't occur in the MP, so no coefficients in reduced cost term
@@ -446,7 +446,7 @@ void SubProblem::UpdateObjective(shared_ptr<DualValues> dual_values, const bool 
 
     SCIP_Real column_cost = 0;
     SCIP_Real dual_cost = 0;
-    SCIP_Real original_var_cost = dual_values->pi_original_var_X[tuple];
+    SCIP_Real original_var_cost = -dual_values->pi_original_var_X[tuple];
 
     // skip rest of cost if coil_i is non-regular since such variables do not occur at objective nor at coil partitioning constraint, only at original variable restore constraint
     if (instance_->IsRegularCoil(coil_i))
