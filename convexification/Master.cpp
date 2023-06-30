@@ -496,6 +496,7 @@ tuple<bool, Coil, Mode, Mode> Master::FindSucessorCoil(SCIP_Sol *solution, Coil 
 
 void Master::DisplaySolution()
 {
+   
    SCIPprintBestSol(scipRMP_, NULL, FALSE);
 
    SCIP_SOL *solution = SCIPgetBestSol(scipRMP_);
@@ -503,8 +504,12 @@ void Master::DisplaySolution()
    cout << endl
         << endl;
    cout << "==== Coil Assignment ====" << endl;
+   
+   double total_cost = 0;
    for (auto &line : instance_->productionLines)
    {
+      // calculate total cost and find successor coils, starting from coil_i=0, mode=0
+      double line_cost = 0;
       cout << "Line " << line << endl;
       Coil coil_i = instance_->startCoil;
       auto [found, coil_j, mode_i, mode_j] = FindSucessorCoil(solution, coil_i, line);
@@ -513,6 +518,7 @@ void Master::DisplaySolution()
 
       while (coil_i != instance_->endCoil)
       {
+         line_cost += instance_->stringerCosts[make_tuple(coil_i, mode_i, coil_j, mode_j, line)];
          if (coil_i == instance_->startCoil)
          {
             cout << "Start";
@@ -534,8 +540,12 @@ void Master::DisplaySolution()
          mode_j = mode_j_new;
       }
 
-      cout << "End" << endl;
+      // update total cost
+      total_cost += line_cost;   
 
+      cout << "End" << endl;
+      cout << "Line cost: " << line_cost << endl;
       cout << "==== Coil Assignment ====" << endl;
    }
+   cout << "Total cost: " << total_cost << endl;
 };
