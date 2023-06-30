@@ -4,6 +4,14 @@
 using namespace std;
 using namespace scip;
 
+template <typename Map>
+bool map_compare(Map const &lhs, Map const &rhs)
+{
+  // No predicate needed because there is operator== for pairs already.
+  return lhs.size() == rhs.size() && std::equal(lhs.begin(), lhs.end(),
+                                                rhs.begin());
+}
+
 MyPricer::MyPricer(shared_ptr<Master> master_problem, const char *pricer_name, const char *pricer_desc, int pricer_priority, SCIP_Bool pricer_delay)
     : ObjPricer(master_problem->scipRMP_, pricer_name, pricer_desc, pricer_priority, pricer_delay), // TRUE : LP is re-optimized each time a variable is added
       pricer_name_(pricer_name), pricer_desc_(pricer_desc), master_problem_(master_problem), scipRMP_(master_problem->scipRMP_), instance_(master_problem->instance_)
@@ -138,32 +146,80 @@ SCIP_RESULT MyPricer::Pricing(const bool is_farkas)
   dual_values_->pi_max_delayed_coils_ = is_farkas ? SCIPgetDualfarkasLinear(scipRMP_, master_problem_->cons_max_delayed_coils_)
                                                   : SCIPgetDualsolLinear(scipRMP_, master_problem_->cons_max_delayed_coils_);
 
-
   // original variables constraint
   // X
   for (auto &[tuple, cons] : master_problem_->cons_original_var_X)
   {
     dual_values_->pi_original_var_X[tuple] = is_farkas ? SCIPgetDualfarkasLinear(scipRMP_, cons)
-                                                     : SCIPgetDualsolLinear(scipRMP_, cons);
+                                                       : SCIPgetDualsolLinear(scipRMP_, cons);
   }
-  
+
   // Z
   for (auto &[coil, cons] : master_problem_->cons_original_var_Z)
   {
     dual_values_->pi_original_var_Z[coil] = is_farkas ? SCIPgetDualfarkasLinear(scipRMP_, cons)
-                                                     : SCIPgetDualsolLinear(scipRMP_, cons);
+                                                      : SCIPgetDualsolLinear(scipRMP_, cons);
   }
 
   // Update objective function of and solve all subproblems
   for (auto &[line, subproblem] : this->subproblems_)
   {
-    subproblem.UpdateObjective(dual_values_, is_farkas);
-    auto subproblem_solution = subproblem.Solve();
+    // run until terminate is true
+    // if a new column was found
+    // or if dynamic gap was reduced to 0 and still only an existing column was found
 
-    // add variable if it could happen that selecting it improves the objective
-    if (subproblem_solution->reduced_cost_negative) {
-      DisplaySchedule(subproblem_solution);
-      AddNewVar(subproblem_solution);
+    // reset dynamic gap
+    subproblem.ResetDynamicGap();
+    bool terminate = false;
+    while (!terminate)
+    {
+      subproblem.UpdateObjective(dual_values_, is_farkas);
+      auto subproblem_solution = subproblem.Solve();
+
+      // add variable if it could happen that selecting it improves the objective
+      if (subproblem_solution->reduced_cost_negative)
+      {
+        // check if solution is already contained in our generated schedules
+        bool schedule_contained = false;
+        for (auto &schedule : master_problem_->schedules_[line])
+        {
+          if (map_compare(schedule->edges, subproblem_solution->edges))
+          {
+            schedule_contained = true;
+            break;
+          }
+        }
+
+        if (!schedule_contained)
+        {
+          // add schedule and corresponding variable if it wasn't generated previously
+          DisplaySchedule(subproblem_solution);
+          AddNewVar(subproblem_solution);
+          terminate = true;
+        }
+        else
+        {
+          // the schedule was already generated previously
+          auto old_gap = subproblem.dynamic_gap_;
+          if (old_gap == 0)
+          {
+            // terminate since we already have found the best column in this iteration
+            cout << "Even the schedule with most negative reduced cost was already generated. Skipping this subproblem for line " << subproblem.line_ << endl;
+            terminate = true;
+          }
+          else
+          {
+            subproblem.dynamic_gap_ /= 2;
+
+            auto new_gap = subproblem.dynamic_gap_;
+            cout << "Schedule for line " << subproblem.line_ << " already contained, decreasing Farkas gap to higher value from " << old_gap << " to " << new_gap << endl;
+          }
+        }
+      }
+      else
+      {
+        terminate = true;
+      }
     }
   }
 
@@ -190,7 +246,7 @@ SCIP_RETCODE MyPricer::scip_redcost(SCIP *scip,
                                     SCIP_Bool *stopearly,
                                     SCIP_RESULT *result)
 {
-  cout << "Dual-Pricing: ";
+  cout << "Dual-Pricing: " << endl;
   // start dual-pricing with isFarkas-Flag = false
   *result = Pricing(false);
 
@@ -212,7 +268,7 @@ SCIP_RETCODE MyPricer::scip_redcost(SCIP *scip,
 SCIP_RETCODE MyPricer::scip_farkas(SCIP *scip, SCIP_PRICER *pricer, SCIP_RESULT *result)
 {
 
-  cout << "Farkas-Pricing: ";
+  cout << "Farkas-Pricing: " << endl;
   // start dual-pricing with is_farkas-Flag = false
   *result = Pricing(true);
 

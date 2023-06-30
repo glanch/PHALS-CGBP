@@ -14,9 +14,13 @@ public:
 
     void UpdateObjective(shared_ptr<DualValues> dual_values, const bool is_farkas);
     shared_ptr<ProductionLineSchedule> Solve();
-
-private:
+    
+    void SetGap(int gap);
+    void ResetDynamicGap();
+    int dynamic_gap_ = Settings::kDynamicGap;
+    
     ProductionLine line_;
+private:
     shared_ptr<Instance> instance_;
     SCIP *scipSP_;
 
@@ -39,4 +43,6 @@ private:
     void CreateZVariable(Coil coil_i);
     void CreateSVariable(Coil coil_i);
     void CreateXVariable(Coil coil_i, Coil coil_j, ProductionLine line, Mode mode_i, Mode mode_j);
+
+    int gap_ = 0;
 };

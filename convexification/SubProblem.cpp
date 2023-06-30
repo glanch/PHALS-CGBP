@@ -3,6 +3,16 @@
 #include <scip/scip.h>
 #include <scip/scipdefplugins.h>
 
+void SubProblem::SetGap(int gap)
+{
+  gap_ = gap;
+  SCIPsetRealParam(scipSP_, "limits/gap", gap_); // default 0
+}
+
+void SubProblem::ResetDynamicGap()
+{
+  dynamic_gap_ = 100;
+}
 void SubProblem::CreateZVariable(Coil coil_i)
 {
   assert(vars_Z_.count(coil_i) == 0);
@@ -89,6 +99,8 @@ void SubProblem::Setup(shared_ptr<Instance> instance, ProductionLine line)
   // set all optional SCIPParameters
   SCIPsetIntParam(scipSP_, "display/verblevel", 0);
   SCIPsetBoolParam(scipSP_, "display/lpinfo", FALSE);
+
+  // SCIPsetRealParam(scipSP_, "limits/time", 5);    // default 1e+20 s
 
   // we do not care about solutions, if these have a not negative optimal objfunc-value
   SCIPsetObjlimit(scipSP_, -SCIPepsilon(scipSP_));
@@ -294,7 +306,7 @@ void SubProblem::Setup(shared_ptr<Instance> instance, ProductionLine line)
     SCIPaddCoefLinear(scipSP_, cons_delay_linking_[coil_i], var_constant_one_, -instance_->dueDates[coil_i]);
 
     // big M linearization
-    SCIP_Real big_M = Settings::kBigM; // TODO: !!!!
+    SCIP_Real big_M = instance_->bigM[line_];
     SCIPaddCoefLinear(scipSP_, cons_delay_linking_[coil_i], vars_Z_[coil_i], -big_M);
 
     SCIPaddCons(scipSP_, cons_delay_linking_[coil_i]);
@@ -328,7 +340,7 @@ void SubProblem::Setup(shared_ptr<Instance> instance, ProductionLine line)
       SCIPaddCoefLinear(scipSP_, cons_start_time_linking_[con_tuple], vars_S_[coil_j], -1);
 
       // add -M
-      SCIP_Real big_M = Settings::kBigM;
+      SCIP_Real big_M = instance_->bigM[line_];
       SCIPaddCoefLinear(scipSP_, cons_start_time_linking_[con_tuple], var_constant_one_, -big_M);
       for (auto &mode_i : instance_->modes[make_tuple(coil_i, line_)])
       {
@@ -349,7 +361,7 @@ void SubProblem::Setup(shared_ptr<Instance> instance, ProductionLine line)
     }
   }
 
-  // (8) max number of delayed columns
+  // // (8) max number of delayed columns
   SCIPsnprintf(var_cons_name, Settings::kSCIPMaxStringLength, "max_delayed_coils");
 
   SCIPcreateConsBasicLinear(scipSP_,                         // scip
@@ -466,6 +478,9 @@ void SubProblem::UpdateObjective(shared_ptr<DualValues> dual_values, const bool 
 
 shared_ptr<ProductionLineSchedule> SubProblem::Solve()
 {
+
+  cout << "Solving subproblem for line " << line_ << " with dynamic gap " << dynamic_gap_ << endl;
+  this->SetGap(dynamic_gap_);
 
   char model_name[Settings::kSCIPMaxStringLength];
   (void)SCIPsnprintf(model_name, Settings::kSCIPMaxStringLength, "SubProblems/SubProblem_L%d_%d.lp", line_, iteration_);

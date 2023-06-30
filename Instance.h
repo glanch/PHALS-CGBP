@@ -49,6 +49,8 @@ public:
    map<tuple<Coil, Mode, Coil, Mode, ProductionLine>, StringerNeeded> stringerNeeded;
    map<tuple<Coil, Mode, Coil, Mode, ProductionLine>, StringerCosts> stringerCosts;
 
+   map<ProductionLine, double> bigM;
+   
    void read(string nameFile);      // function to read data from a file
    void readPhals(string nameFile); // function to read data from a phals file
 

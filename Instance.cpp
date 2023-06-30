@@ -184,6 +184,28 @@ void Instance::read(string nameFile)
    }
 
    infile.close();
+
+   // calculate a better bound for big M than a ridiculously large number
+   for (auto &line : productionLines)
+   {
+      double bigM_value = 0;
+      for (auto &coil_i : coils)
+      {
+         for (auto &mode_i : modes[make_tuple(coil_i, line)])
+         {
+            bigM_value += processingTimes[make_tuple(coil_i, line, mode_i)];
+            for (auto &coil_j : coils)
+            {
+               for (auto &mode_j : modes[make_tuple(coil_j, line)])
+               {
+                  bigM_value += setupTimes[make_tuple(coil_i, mode_i, line, coil_j, mode_j)];
+               }
+            }
+         }
+      }
+
+      bigM[line] = bigM_value;
+   }
 }
 
 void Instance::display()
