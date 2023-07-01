@@ -38,9 +38,3 @@ S_i+ \sum_{k \in \mathcal{K}} \sum_{m \in \mathcal{M}_{ik}} \sum_{n \in \mathcal
 \sum_{i\in \mathcal{I}} Z_i \leq \alpha \\
 
 ```
-
-
-
-## Rendered pdf
-# ba-thesis-paper
-Rendered paper pdf can be accessed [here](https://gitlab.uni-hannover.de/christopher.glanderluh/or-ii-final-project/-/jobs/artifacts/main/raw/Assignment/Hausarbeit/Hausarbeit.pdf?job=paper).
