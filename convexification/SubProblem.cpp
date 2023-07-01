@@ -3,7 +3,7 @@
 #include <scip/scip.h>
 #include <scip/scipdefplugins.h>
 
-void SubProblem::SetGap(int gap)
+void SubProblem::SetGap(double gap)
 {
   gap_ = gap;
   SCIPsetRealParam(scipSP_, "limits/gap", gap_); // default 0
@@ -11,7 +11,7 @@ void SubProblem::SetGap(int gap)
 
 void SubProblem::ResetDynamicGap()
 {
-  dynamic_gap_ = 100;
+  dynamic_gap_ = Settings::kDynamicGap;
 }
 void SubProblem::CreateZVariable(Coil coil_i)
 {

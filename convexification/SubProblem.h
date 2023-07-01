@@ -15,9 +15,9 @@ public:
     void UpdateObjective(shared_ptr<DualValues> dual_values, const bool is_farkas);
     shared_ptr<ProductionLineSchedule> Solve();
     
-    void SetGap(int gap);
+    void SetGap(double gap);
     void ResetDynamicGap();
-    int dynamic_gap_ = Settings::kDynamicGap;
+    double dynamic_gap_ = Settings::kDynamicGap;
     
     ProductionLine line_;
 private:

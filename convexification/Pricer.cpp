@@ -201,10 +201,10 @@ SCIP_RESULT MyPricer::Pricing(const bool is_farkas)
         {
           // the schedule was already generated previously
           auto old_gap = subproblem.dynamic_gap_;
-          if (old_gap == 0)
+          if (old_gap <= Settings::kDynamicGapLowerBound)
           {
             // terminate since we already have found the best column in this iteration
-            cout << "Even the schedule with most negative reduced cost was already generated. Skipping this subproblem for line " << subproblem.line_ << endl;
+            cout << "Even the schedule with most negative reduced cost within our dynamic gap lower bound of " << Settings::kDynamicGapLowerBound << " was already generated. Skipping this subproblem for line " << subproblem.line_ << endl;
             terminate = true;
           }
           else
@@ -212,7 +212,7 @@ SCIP_RESULT MyPricer::Pricing(const bool is_farkas)
             subproblem.dynamic_gap_ /= 2;
 
             auto new_gap = subproblem.dynamic_gap_;
-            cout << "Schedule for line " << subproblem.line_ << " already contained, decreasing Farkas gap to higher value from " << old_gap << " to " << new_gap << endl;
+            cout << "Schedule for line " << subproblem.line_ << " already contained, decreasing dynamic gap from " << old_gap << " to " << new_gap << endl;
           }
         }
       }
