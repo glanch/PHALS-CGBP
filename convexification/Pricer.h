@@ -68,4 +68,6 @@ private:
    void DisplaySchedule(shared_ptr<ProductionLineSchedule> column);
 
    shared_ptr<DualValues> dual_values_; // Pointer to the values of the dual variables for the current iteration of the ColumnGeneration
+
+   bool reverse_subproblem_order_ = false;
 };
