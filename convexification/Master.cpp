@@ -171,7 +171,7 @@ void Master::CreateXVariable(Coil coil_i, Coil coil_j, ProductionLine line, Mode
    SCIPaddCons(scipRMP_, cons_original_var_X[var_tuple]);
 }
 
-Master::Master(shared_ptr<Instance> instance) : instance_(instance)
+Master::Master(shared_ptr<Instance> instance) : instance_(instance), initial_column_heuristic_tried_(false)
 {
    // create a SCIP environment and load all defaults
    SCIPcreate(&scipRMP_);

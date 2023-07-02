@@ -67,4 +67,6 @@ public:
    void CreateXVariable(Coil coil_i, Coil coil_j, ProductionLine line, Mode mode_i, Mode mode_j);
 
    tuple<bool, Coil, Mode, Mode> FindSucessorCoil(SCIP_Sol *solution, Coil coil_i, ProductionLine line);
+
+   bool initial_column_heuristic_tried_;
 };

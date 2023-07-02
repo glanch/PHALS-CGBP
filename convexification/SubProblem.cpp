@@ -99,8 +99,8 @@ void SubProblem::Setup(shared_ptr<Instance> instance, ProductionLine line)
   // set all optional SCIPParameters
   SCIPsetIntParam(scipSP_, "display/verblevel", 0);
   SCIPsetBoolParam(scipSP_, "display/lpinfo", FALSE);
-
-  // SCIPsetRealParam(scipSP_, "limits/time", 5);    // default 1e+20 s
+  SCIPsetRealParam(scipSP_, "limits/time", 1e+20);    // default 1e+20 s
+  SCIPsetRealParam(scipSP_, "limits/gap", 0);         // default 0
 
   // we do not care about solutions, if these have a not negative optimal objfunc-value
   SCIPsetObjlimit(scipSP_, -SCIPepsilon(scipSP_));
@@ -379,12 +379,45 @@ void SubProblem::Setup(shared_ptr<Instance> instance, ProductionLine line)
   }
 
   SCIPaddCons(scipSP_, cons_max_delayed_coils_);
+
+  // (TODO) delay linking: link sum(X_ijkmn) and Z_i, if Z_i is 1, at least one X_ijkmn must be 1
+  // skip non-regular coils
+  for (auto &coil_i : instance_->regularCoils)
+  {
+    SCIPsnprintf(var_cons_name, Settings::kSCIPMaxStringLength, "cons_delay_edge_linking_%d", coil_i);
+
+    SCIPcreateConsBasicLinear(scipSP_,                           // scip
+                              &cons_delay_edge_linking_[coil_i], // cons
+                              var_cons_name,                     // name
+                              0,                                 // nvar
+                              0,                                 // vars
+                              0,                                 // coeffs
+                              -SCIPinfinity(scipSP_),            // lhs
+                              0);                                // rhs
+
+    // add coefficients
+    // add Z_i
+    SCIPaddCoefLinear(scipSP_, cons_delay_edge_linking_[coil_i], vars_Z_[coil_i], 1);
+
+    // add <= sum(1*X_ijkmn) to constraint term
+    for (auto const &[tuple, var_X] : vars_X_)
+    {
+      if (get<0>(tuple) == coil_i)
+      {
+        // if this variable incorporates coil_i as start point, add it to constraint
+        SCIPaddCoefLinear(scipSP_, cons_delay_edge_linking_[coil_i], var_X, -1);
+      }
+    }
+    SCIPaddCons(scipSP_, cons_delay_edge_linking_[coil_i]);
+  }
+
 }
 // destructor
 SubProblem::~SubProblem()
 {
   SCIPreleaseCons(scipSP_, &cons_production_line_start_);
   SCIPreleaseCons(scipSP_, &cons_production_line_end_);
+  SCIPreleaseCons(scipSP_, &cons_max_delayed_coils_);
 
   for (auto &[_, cons] : this->cons_flow_conservation_)
   {
@@ -397,6 +430,11 @@ SubProblem::~SubProblem()
   }
 
   for (auto &[_, cons] : this->cons_start_time_linking_)
+  {
+    SCIPreleaseCons(scipSP_, &cons);
+  }
+
+  for (auto &[_, cons] : this->cons_delay_edge_linking_)
   {
     SCIPreleaseCons(scipSP_, &cons);
   }
