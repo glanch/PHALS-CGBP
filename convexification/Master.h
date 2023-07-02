@@ -68,5 +68,6 @@ public:
 
    tuple<bool, Coil, Mode, Mode> FindSucessorCoil(SCIP_Sol *solution, Coil coil_i, ProductionLine line);
 
-   bool initial_column_heuristic_tried_;
+   bool initial_column_heuristic_tried_ = false;
+   bool initial_column_heuristic_enabled_ = false;
 };

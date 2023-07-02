@@ -5,13 +5,12 @@
 int main()
 {
     auto instance = make_shared<Instance>();
-    instance->read("../data/Ins_12.cal");
+    instance->read("../data/Ins_8.cal");
 
     auto compact_model = make_unique<CompactModel>(instance);
 
-    compact_model->Solve();
-
-    compact_model->DisplaySolution();
+    // compact_model->Solve();
+    // compact_model->DisplaySolution();
 
     auto master_problem = make_shared<Master>(instance);
 

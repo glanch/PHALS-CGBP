@@ -1,5 +1,7 @@
 #include <memory>
 #include "Pricer.h"
+#include "SubProblemInitialColumns.h"
+#include "SubProblem.h"
 
 using namespace std;
 using namespace scip;
@@ -23,6 +25,7 @@ MyPricer::MyPricer(shared_ptr<Master> master_problem, const char *pricer_name, c
   for (auto &line : instance_->productionLines)
   {
     this->subproblems_[line].Setup(instance_, line);
+    this->subproblems_initial_columns_[line].Setup(instance_, line);
   }
 }
 
@@ -161,19 +164,14 @@ SCIP_RESULT MyPricer::Pricing(const bool is_farkas)
                                                       : SCIPgetDualsolLinear(scipRMP_, cons);
   }
 
-  // Update objective function of and solve all subproblems
-  for (auto &[line, subproblem] : this->subproblems_)
+  // heuristic
+  if (!master_problem_->initial_column_heuristic_tried_ && master_problem_->initial_column_heuristic_enabled_)
   {
-    // run until terminate is true
-    // if a new column was found
-    // or if dynamic gap was reduced to 0 and still only an existing column was found
-
-    // reset dynamic gap
-    subproblem.ResetDynamicGap();
-    bool terminate = false;
-    while (!terminate)
+    // try to find initial column that has as many columns as possible
+    for (auto &[line, subproblem] : this->subproblems_initial_columns_)
     {
       subproblem.UpdateObjective(dual_values_, is_farkas);
+
       auto subproblem_solution = subproblem.Solve();
 
       // add variable if it could happen that selecting it improves the objective
@@ -189,36 +187,94 @@ SCIP_RESULT MyPricer::Pricing(const bool is_farkas)
             break;
           }
         }
+        assert(!schedule_contained);
 
-        if (!schedule_contained)
-        {
-          // add schedule and corresponding variable if it wasn't generated previously
-          DisplaySchedule(subproblem_solution);
-          AddNewVar(subproblem_solution);
-          terminate = true;
-        }
-        else
-        {
-          // the schedule was already generated previously
-          auto old_gap = subproblem.dynamic_gap_;
-          if (old_gap <= Settings::kDynamicGapLowerBound)
-          {
-            // terminate since we already have found the best column in this iteration
-            cout << "Even the schedule with most negative reduced cost within our dynamic gap lower bound of " << Settings::kDynamicGapLowerBound << " was already generated. Skipping this subproblem for line " << subproblem.line_ << endl;
-            terminate = true;
-          }
-          else
-          {
-            subproblem.dynamic_gap_ /= 2;
+        cout << "Initial feasible column found with heuristic for line " << subproblem.line_ << endl;
 
-            auto new_gap = subproblem.dynamic_gap_;
-            cout << "Schedule for line " << subproblem.line_ << " already contained, decreasing dynamic gap from " << old_gap << " to " << new_gap << endl;
-          }
-        }
+        // add schedule and corresponding variable if it wasn't generated previously
+        DisplaySchedule(subproblem_solution);
+        AddNewVar(subproblem_solution);
+
+        // break;
       }
       else
       {
-        terminate = true;
+        cout << "Heuristic for line " << subproblem.line_ << " failed." << endl;
+      }
+    }
+
+    master_problem_->initial_column_heuristic_tried_ = true;
+  }
+  else
+  {
+
+    // Update objective function of and solve all subproblems
+    for (auto &[line, subproblem] : this->subproblems_)
+    {
+      // run until terminate is true
+      // if a new column was found
+      // or if dynamic gap was reduced to 0 and still only an existing column was found
+
+      // reset dynamic gap
+      subproblem.ResetDynamicGap();
+      bool terminate = false;
+      bool column_found = false;
+      while (!terminate)
+      {
+        subproblem.UpdateObjective(dual_values_, is_farkas);
+        auto subproblem_solution = subproblem.Solve();
+
+        // add variable if it could happen that selecting it improves the objective
+        if (subproblem_solution->reduced_cost_negative)
+        {
+          // check if solution is already contained in our generated schedules
+          bool schedule_contained = false;
+          for (auto &schedule : master_problem_->schedules_[line])
+          {
+            if (map_compare(schedule->edges, subproblem_solution->edges))
+            {
+              schedule_contained = true;
+              break;
+            }
+          }
+
+          if (!schedule_contained)
+          {
+            // add schedule and corresponding variable if it wasn't generated previously
+            DisplaySchedule(subproblem_solution);
+            AddNewVar(subproblem_solution);
+            terminate = true;
+            column_found = true;
+          }
+          else
+          {
+            // the schedule was already generated previously
+            auto old_gap = subproblem.dynamic_gap_;
+            if (old_gap <= Settings::kDynamicGapLowerBound)
+            {
+              // terminate since we already have found the best column in this iteration
+              cout << "Even the schedule with most negative reduced cost within our dynamic gap lower bound of " << Settings::kDynamicGapLowerBound << " was already generated. Skipping this subproblem for line " << subproblem.line_ << endl;
+              terminate = true;
+            }
+            else
+            {
+              subproblem.dynamic_gap_ /= 2;
+
+              auto new_gap = subproblem.dynamic_gap_;
+              cout << "Schedule for line " << subproblem.line_ << " already contained, decreasing dynamic gap from " << old_gap << " to " << new_gap << endl;
+            }
+          }
+        }
+        else
+        {
+          terminate = true;
+        }
+      }
+
+      if (column_found)
+      {
+        // break loop and return
+        return SCIP_SUCCESS;
       }
     }
   }
@@ -247,10 +303,12 @@ SCIP_RETCODE MyPricer::scip_redcost(SCIP *scip,
                                     SCIP_RESULT *result)
 {
   cout << "Dual-Pricing: " << endl;
+
   // start dual-pricing with isFarkas-Flag = false
   *result = Pricing(false);
 
   cout << endl;
+
   return SCIP_OKAY;
 }
 
@@ -268,11 +326,94 @@ SCIP_RETCODE MyPricer::scip_redcost(SCIP *scip,
 SCIP_RETCODE MyPricer::scip_farkas(SCIP *scip, SCIP_PRICER *pricer, SCIP_RESULT *result)
 {
 
-  cout << "Farkas-Pricing: " << endl;
-  // start dual-pricing with is_farkas-Flag = false
-  *result = Pricing(true);
+  // check if trivial column generation is enabled
+  if (Settings::kGenerateInitialTrivialColumn)
+  {
+    cout << "Generating initial trivial column for feasibility" << endl;
+    // generate initial trivial column that is very expensive
+    // for each coil find lines and modes it may be scheduled on
+    map<Coil, map<ProductionLine, Mode>> modes_and_lines_per_coil;
+    for (auto &coil_i : instance_->regularCoils)
+    {
+      for (auto &line : instance_->productionLines)
+      {
+        auto &modes_i = instance_->modes[make_tuple(coil_i, line)];
+        if (modes_i.size() > 0)
+        {
+          modes_and_lines_per_coil[coil_i][line] = modes_i[0];
+        }
+      }
+    }
 
-  cout << endl;
+    map<ProductionLine, vector<tuple<Coil, Coil, ProductionLine, Mode, Mode>>> matched_coils;
+
+    // now match every coil with at least one other different coil on the same line
+    for (auto &[coil_i, lines_and_modes_i] : modes_and_lines_per_coil)
+    {
+      bool coil_j_found = false;
+      for (auto &[line, mode_i] : lines_and_modes_i)
+      {
+        for (auto &[coil_j, lines_and_modes_j] : modes_and_lines_per_coil)
+        {
+          if (coil_i == coil_j)
+            continue;
+
+          if (lines_and_modes_j.count(line) > 0)
+          {
+            auto mode_j = lines_and_modes_j[line];
+            // found a matching coil, add it to list
+            coil_j_found = true;
+            matched_coils[line].push_back(make_tuple(coil_i, coil_j, line, mode_i, mode_j));
+            break;
+          }
+        }
+
+        if (coil_j_found)
+        {
+          break;
+        }
+      }
+
+      if (!coil_j_found)
+      {
+        cout << "No matching coil found";
+      }
+    }
+
+    // generate upper bound of costs to use as schedule cost
+    double cost_upper_bound = 0;
+    for (auto &[_, cost] : instance_->stringerCosts)
+    {
+      cost_upper_bound += cost;
+    }
+
+    for (auto &line : instance_->productionLines)
+    {
+      auto schedule = make_shared<ProductionLineSchedule>();
+      schedule->line = line;
+      schedule->schedule_cost = cost_upper_bound;
+      for (auto &[coil_i, coil_j, line_map, mode_i, mode_j] : matched_coils[line])
+      {
+        assert(line == line_map);
+        schedule->edges[make_tuple(coil_i, coil_j, line_map, mode_i, mode_j)] = true;
+        // set line
+      }
+
+      DisplaySchedule(schedule);
+      AddNewVar(schedule);
+    }
+
+    *result = SCIP_SUCCESS;
+  }
+  else
+  {
+
+    cout << "Farkas-Pricing: " << endl;
+    // start dual-pricing with isFarkas-Flag = false
+    *result = Pricing(true);
+
+    cout << endl;
+  }
 
   return SCIP_OKAY;
 }
