@@ -362,9 +362,6 @@ void SubProblemInitialColumns::Setup(shared_ptr<Instance> instance, ProductionLi
       {
         for (auto &mode_j : modes_j)
         {
-
-          if (coil_i == 13)
-            cout << "Found 13" << endl;
           CreateXVariable(coil_i, coil_j, line_, mode_i, mode_j);
         }
       }

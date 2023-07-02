@@ -70,4 +70,6 @@ private:
    shared_ptr<DualValues> dual_values_; // Pointer to the values of the dual variables for the current iteration of the ColumnGeneration
 
    bool reverse_subproblem_order_ = false;
+   int redcost_iteration_ = 0;
+   int farkas_iteration_ = 0;
 };

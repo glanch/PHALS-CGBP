@@ -9,7 +9,6 @@
 using namespace std;
 using namespace scip;
 
-
 template <typename Map>
 bool map_compare(Map const &lhs, Map const &rhs)
 {
@@ -127,6 +126,7 @@ SCIP_RETCODE MyPricer::scip_init(SCIP *scip, SCIP_PRICER *pricer)
  */
 SCIP_RESULT MyPricer::Pricing(const bool is_farkas)
 {
+
   // ############################################################################################################
   //  define the dual variables
   //  we need one value for every constraint, so use the same loops as in the master-problem
@@ -391,13 +391,29 @@ SCIP_RETCODE MyPricer::scip_redcost(SCIP *scip,
                                     SCIP_Bool *stopearly,
                                     SCIP_RESULT *result)
 {
-  cout << "Dual-Pricing: " << endl;
+  auto dual_bound = SCIPgetDualbound(scipRMP_);
+  auto avg_dual_bound = SCIPgetAvgDualbound(scipRMP_);
+  auto primal_bound = SCIPgetPrimalbound(scipRMP_);
+  cout << "=======================================================" << endl;
+  cout << "MyPricer::scip_redcost was called" << endl
+       << "Pricer Iteration redcost: \t" << redcost_iteration_ << "" << endl
+       << "\t current farkas : \t" << farkas_iteration_ << "" << endl
+       << "\t both:            \t" << (farkas_iteration_ + redcost_iteration_) << "" << endl
+       << endl
+       << "Current Bounds:" << endl
+       << "Primal (objective current incumbent) \t" << primal_bound << endl
+       << "Dual (best global dual bound): \t" << dual_bound << endl
+       << "Avg Dual (Avg best global dual bound): \t" << avg_dual_bound << endl
+       << "Performing Dual-Pricing: " << endl;
+  cout << "=======================================================" << endl
+       << endl;
 
   // start dual-pricing with isFarkas-Flag = false
   *result = Pricing(false);
 
   cout << endl;
 
+  redcost_iteration_++;
   return SCIP_OKAY;
 }
 
@@ -414,6 +430,22 @@ SCIP_RETCODE MyPricer::scip_redcost(SCIP *scip,
  */
 SCIP_RETCODE MyPricer::scip_farkas(SCIP *scip, SCIP_PRICER *pricer, SCIP_RESULT *result)
 {
+  auto dual_bound = SCIPgetDualbound(scipRMP_);
+  auto avg_dual_bound = SCIPgetAvgDualbound(scipRMP_);
+  auto primal_bound = SCIPgetPrimalbound(scipRMP_);
+  cout << "=======================================================" << endl;
+  cout << "MyPricer::scip_farkas was called" << endl
+       << "Pricer Iteration farkas: \t" << farkas_iteration_ << "" << endl
+       << "\t current redcost: \t" << redcost_iteration_ << "" << endl
+       << "\t both : " << (farkas_iteration_ + redcost_iteration_) << "" << endl
+       << endl
+       << "Current Bounds:" << endl
+       << "Primal (objective current incumbent) \t" << primal_bound << endl
+       << "Dual (best global dual bound): \t" << dual_bound << endl
+       << "Avg Dual (Avg best global dual bound): \t" << avg_dual_bound << endl
+       << "Performing Farkas Routine: " << endl;
+  cout << "=======================================================" << endl
+       << endl;
 
   // check if trivial column generation is enabled
   if (Settings::kGenerateInitialTrivialColumn)
@@ -504,6 +536,7 @@ SCIP_RETCODE MyPricer::scip_farkas(SCIP *scip, SCIP_PRICER *pricer, SCIP_RESULT 
     cout << endl;
   }
 
+  farkas_iteration_++;
   return SCIP_OKAY;
 }
 
