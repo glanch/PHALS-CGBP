@@ -54,6 +54,7 @@
           cmake
           clang-tools_15
           valgrind
+          boost
         ];
 
       };

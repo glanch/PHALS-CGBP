@@ -3,8 +3,12 @@
 #include "SubProblemInitialColumns.h"
 #include "SubProblem.h"
 
+#include <boost/range/adaptor/reversed.hpp>
+#include <boost/range/adaptor/filtered.hpp>
+
 using namespace std;
 using namespace scip;
+
 
 template <typename Map>
 bool map_compare(Map const &lhs, Map const &rhs)
@@ -209,77 +213,162 @@ SCIP_RESULT MyPricer::Pricing(const bool is_farkas)
   {
 
     // Update objective function of and solve all subproblems
-    for (auto &[line, subproblem] : this->subproblems_)
+
+    // for (auto &[line, subproblem] : this->subproblems_)
+    // {
+
+    if (reverse_subproblem_order_)
     {
-      // run until terminate is true
-      // if a new column was found
-      // or if dynamic gap was reduced to 0 and still only an existing column was found
-
-      // reset dynamic gap
-      subproblem.ResetDynamicGap();
-      bool terminate = false;
-      bool column_found = false;
-      while (!terminate)
+      // for (auto& iter : (x ? boost::adaptors::reverse(boost::adaptors::reverse((subproblems_)) : boost::adaptors::filter(subproblems_, [](int _i) { return true})) ) {
+      for (auto &iter : boost::adaptors::reverse(subproblems_))
       {
-        subproblem.UpdateObjective(dual_values_, is_farkas);
-        auto subproblem_solution = subproblem.Solve();
+        auto &line = iter.first;
+        auto &subproblem = iter.second;
+        // run until terminate is true
+        // if a new column was found
+        // or if dynamic gap was reduced to 0 and still only an existing column was found
 
-        // add variable if it could happen that selecting it improves the objective
-        if (subproblem_solution->reduced_cost_negative)
+        // reset dynamic gap
+        subproblem.ResetDynamicGap();
+        bool terminate = false;
+        bool column_found = false;
+        while (!terminate)
         {
-          // check if solution is already contained in our generated schedules
-          bool schedule_contained = false;
-          for (auto &schedule : master_problem_->schedules_[line])
-          {
-            if (map_compare(schedule->edges, subproblem_solution->edges))
-            {
-              schedule_contained = true;
-              break;
-            }
-          }
+          subproblem.UpdateObjective(dual_values_, is_farkas);
+          auto subproblem_solution = subproblem.Solve();
 
-          if (!schedule_contained)
+          // add variable if it could happen that selecting it improves the objective
+          if (subproblem_solution->reduced_cost_negative)
           {
-            // add schedule and corresponding variable if it wasn't generated previously
-            DisplaySchedule(subproblem_solution);
-            AddNewVar(subproblem_solution);
-            terminate = true;
-            column_found = true;
-          }
-          else
-          {
-            // the schedule was already generated previously
-            auto old_gap = subproblem.dynamic_gap_;
-            if (old_gap <= Settings::kDynamicGapLowerBound)
+            // check if solution is already contained in our generated schedules
+            bool schedule_contained = false;
+            for (auto &schedule : master_problem_->schedules_[line])
             {
-              // terminate since we already have found the best column in this iteration
-              cout << "Even the schedule with most negative reduced cost within our dynamic gap lower bound of " << Settings::kDynamicGapLowerBound << " was already generated. Skipping this subproblem for line " << subproblem.line_ << endl;
+              if (map_compare(schedule->edges, subproblem_solution->edges))
+              {
+                schedule_contained = true;
+                break;
+              }
+            }
+
+            if (!schedule_contained)
+            {
+              // add schedule and corresponding variable if it wasn't generated previously
+              DisplaySchedule(subproblem_solution);
+              AddNewVar(subproblem_solution);
               terminate = true;
+              column_found = true;
             }
             else
             {
-              subproblem.dynamic_gap_ /= 2;
+              // the schedule was already generated previously
+              auto old_gap = subproblem.dynamic_gap_;
+              if (old_gap <= Settings::kDynamicGapLowerBound)
+              {
+                // terminate since we already have found the best column in this iteration
+                cout << "Even the schedule with most negative reduced cost within our dynamic gap lower bound of " << Settings::kDynamicGapLowerBound << " was already generated. Skipping this subproblem for line " << subproblem.line_ << endl;
+                terminate = true;
+              }
+              else
+              {
+                subproblem.dynamic_gap_ /= 2;
 
-              auto new_gap = subproblem.dynamic_gap_;
-              cout << "Schedule for line " << subproblem.line_ << " already contained, decreasing dynamic gap from " << old_gap << " to " << new_gap << endl;
+                auto new_gap = subproblem.dynamic_gap_;
+                cout << "Schedule for line " << subproblem.line_ << " already contained, decreasing dynamic gap from " << old_gap << " to " << new_gap << endl;
+              }
             }
           }
+          else
+          {
+            terminate = true;
+          }
         }
-        else
+
+        if (column_found)
         {
-          terminate = true;
+          // break loop and return
+          reverse_subproblem_order_ = !reverse_subproblem_order_;
+          return SCIP_SUCCESS;
         }
       }
-
-      if (column_found)
+    }
+    else
+    {
+      for (auto &iter : subproblems_)
       {
-        // break loop and return
-        return SCIP_SUCCESS;
+        auto &line = iter.first;
+        auto &subproblem = iter.second;
+        // run until terminate is true
+        // if a new column was found
+        // or if dynamic gap was reduced to 0 and still only an existing column was found
+
+        // reset dynamic gap
+        subproblem.ResetDynamicGap();
+        bool terminate = false;
+        bool column_found = false;
+        while (!terminate)
+        {
+          subproblem.UpdateObjective(dual_values_, is_farkas);
+          auto subproblem_solution = subproblem.Solve();
+
+          // add variable if it could happen that selecting it improves the objective
+          if (subproblem_solution->reduced_cost_negative)
+          {
+            // check if solution is already contained in our generated schedules
+            bool schedule_contained = false;
+            for (auto &schedule : master_problem_->schedules_[line])
+            {
+              if (map_compare(schedule->edges, subproblem_solution->edges))
+              {
+                schedule_contained = true;
+                break;
+              }
+            }
+
+            if (!schedule_contained)
+            {
+              // add schedule and corresponding variable if it wasn't generated previously
+              DisplaySchedule(subproblem_solution);
+              AddNewVar(subproblem_solution);
+              terminate = true;
+              column_found = true;
+            }
+            else
+            {
+              // the schedule was already generated previously
+              auto old_gap = subproblem.dynamic_gap_;
+              if (old_gap <= Settings::kDynamicGapLowerBound)
+              {
+                // terminate since we already have found the best column in this iteration
+                cout << "Even the schedule with most negative reduced cost within our dynamic gap lower bound of " << Settings::kDynamicGapLowerBound << " was already generated. Skipping this subproblem for line " << subproblem.line_ << endl;
+                terminate = true;
+              }
+              else
+              {
+                subproblem.dynamic_gap_ /= 2;
+
+                auto new_gap = subproblem.dynamic_gap_;
+                cout << "Schedule for line " << subproblem.line_ << " already contained, decreasing dynamic gap from " << old_gap << " to " << new_gap << endl;
+              }
+            }
+          }
+          else
+          {
+            terminate = true;
+          }
+        }
+
+        if (column_found)
+        {
+          // break loop and return
+          reverse_subproblem_order_ = !reverse_subproblem_order_;
+          return SCIP_SUCCESS;
+        }
       }
     }
   }
-
   // TODO: check this
+  reverse_subproblem_order_ = !reverse_subproblem_order_;
   return SCIP_SUCCESS;
 }
 
@@ -381,7 +470,7 @@ SCIP_RETCODE MyPricer::scip_farkas(SCIP *scip, SCIP_PRICER *pricer, SCIP_RESULT 
     }
 
     // generate upper bound of costs to use as schedule cost
-    double cost_upper_bound = 0;
+    double cost_upper_bound = 1;
     for (auto &[_, cost] : instance_->stringerCosts)
     {
       cost_upper_bound += cost;
