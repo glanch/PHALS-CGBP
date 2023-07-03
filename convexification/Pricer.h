@@ -62,6 +62,9 @@ public:
    SCIP_RESULT Pricing(const bool is_farkas);
 
 private:
+
+   void PrintMasterBounds(bool is_farkas);
+
    // to add the new column, i.e., the stable set, to the master problem
    void AddNewVar(shared_ptr<ProductionLineSchedule> column);
 
