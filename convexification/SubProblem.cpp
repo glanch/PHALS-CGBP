@@ -99,9 +99,9 @@ void SubProblem::Setup(shared_ptr<Instance> instance, ProductionLine line)
   // set all optional SCIPParameters
   SCIPsetIntParam(scipSP_, "display/verblevel", 0);
   SCIPsetBoolParam(scipSP_, "display/lpinfo", FALSE);
-  SCIPsetRealParam(scipSP_, "limits/time", 1e+20);    // default 1e+20 s
-  SCIPsetRealParam(scipSP_, "limits/gap", 0);         // default 0
-
+  SCIPsetRealParam(scipSP_, "limits/time", 1e+20); // default 1e+20 s
+  SCIPsetRealParam(scipSP_, "limits/gap", 0);      // default 0
+  SCIPsetBoolParam(scipSP_, "constraints/countsols/collect", TRUE);
   // we do not care about solutions, if these have a not negative optimal objfunc-value
   SCIPsetObjlimit(scipSP_, -SCIPepsilon(scipSP_));
 
@@ -410,7 +410,6 @@ void SubProblem::Setup(shared_ptr<Instance> instance, ProductionLine line)
     }
     SCIPaddCons(scipSP_, cons_delay_edge_linking_[coil_i]);
   }
-
 }
 // destructor
 SubProblem::~SubProblem()
@@ -514,8 +513,9 @@ void SubProblem::UpdateObjective(shared_ptr<DualValues> dual_values, const bool 
   SCIPchgVarObj(scipSP_, var_constant_one_, -dual_values->pi_convexity_[line_]);
 }
 
-shared_ptr<ProductionLineSchedule> SubProblem::Solve()
+vector<shared_ptr<ProductionLineSchedule>> SubProblem::Solve()
 {
+  vector<shared_ptr<ProductionLineSchedule>> schedules;
 
   cout << "Solving subproblem for line " << line_ << " with dynamic gap " << dynamic_gap_ << endl;
   this->SetGap(dynamic_gap_);
@@ -529,69 +529,80 @@ shared_ptr<ProductionLineSchedule> SubProblem::Solve()
   // solve
   SCIPsolve(scipSP_);
 
-  // restore solution
-  // allocate memory for schedule / column
-  auto schedule = make_shared<ProductionLineSchedule>();
+  // restore solutions
+  auto best_solution = SCIPgetBestSol(scipSP_);
+  auto number_of_solutions = SCIPgetNSols(scipSP_);
 
-  // set line
-  schedule->line = line_;
-
-  // get best solution
-  SCIP_SOL *scip_solution = SCIPgetBestSol(scipSP_);
-
-  // check if solution is null, i.e. no column was found
-  if (scip_solution == NULL)
+  auto solutions = SCIPgetSols(scipSP_);
+  // loop through every solution
+  for (int solution_index = 0; solution_index < number_of_solutions; solution_index++)
   {
-    schedule->reduced_cost = 0;
-    schedule->reduced_cost_negative = false;
-    return schedule;
+    // get solution from scip
+    auto scip_solution = solutions[solution_index];
+
+    // restore solution
+    // allocate memory for schedule / column
+    auto schedule = make_shared<ProductionLineSchedule>();
+
+    // set line
+    schedule->line = line_;
+
+
+    // check if solution is null, i.e. no column was found
+    if (scip_solution == NULL)
+    {
+      // don't add
+      continue;
+    }
+
+    // get reduced cost of schedule
+    schedule->reduced_cost = SCIPgetSolOrigObj(scipSP_, scip_solution);
+
+    // check if reduced cost is negative
+    // do it here because in pricing problem we need to access internal
+    // -> coupling of pricer and subproblem, which should be abstracted away by common interface
+    schedule->reduced_cost_negative = SCIPisNegative(scipSP_, schedule->reduced_cost + 0.001); // TODO: use scip methods here
+
+    // calculate cost of schedule cost, i.e. coefficient of generated column in MP
+    schedule->schedule_cost = 0;
+
+    // furthermore, fill up incidences of schedule
+
+    // iterate through every variable, and thus through every corresponding edge, and access variable identifier
+    for (auto &[tuple, var_X] : vars_X_)
+    {
+      // restore var
+      Coil coil_i = get<0>(tuple);
+      Coil coil_j = get<1>(tuple);
+      ProductionLine line = get<2>(tuple);
+      Mode mode_i = get<3>(tuple);
+      Mode mode_j = get<4>(tuple);
+
+      // this should always be true
+      assert(line == line_);
+
+      // TODO: use SCIP epsilon methods here
+      auto edge_selected = SCIPgetSolVal(scipSP_, scip_solution, var_X) > 0.5;
+
+      // set incidence of this edge corresponding to current variable
+      schedule->edges[tuple] = edge_selected;
+
+      // add cost to schedule if edge is included, else don't
+      if (edge_selected)
+        schedule->schedule_cost += instance_->stringerCosts[make_tuple(coil_i, mode_i, coil_j, mode_j, line)];
+    }
+
+    // restore delayedness
+    for (auto &[coil_i, var_Z] : vars_Z_)
+    {
+      auto coil_delayed = SCIPgetSolVal(scipSP_, scip_solution, var_Z) > 0.5; // TODO: use SCIP epsilon methods
+
+      schedule->delayedness[coil_i] = coil_delayed;
+    }
+
+    schedules.push_back(schedule);
   }
-
-  // get reduced cost of schedule
-  schedule->reduced_cost = SCIPgetSolOrigObj(scipSP_, scip_solution);
-
-  // check if reduced cost is negative
-  // do it here because in pricing problem we need to access internal
-  // -> coupling of pricer and subproblem, which should be abstracted away by common interface
-  schedule->reduced_cost_negative = SCIPisNegative(scipSP_, schedule->reduced_cost + 0.001); // TODO: use scip methods here
-
-  // calculate cost of schedule cost, i.e. coefficient of generated column in MP
-  schedule->schedule_cost = 0;
-
-  // furthermore, fill up incidences of schedule
-
-  // iterate through every variable, and thus through every corresponding edge, and access variable identifier
-  for (auto &[tuple, var_X] : vars_X_)
-  {
-    // restore var
-    Coil coil_i = get<0>(tuple);
-    Coil coil_j = get<1>(tuple);
-    ProductionLine line = get<2>(tuple);
-    Mode mode_i = get<3>(tuple);
-    Mode mode_j = get<4>(tuple);
-
-    // this should always be true
-    assert(line == line_);
-
-    // TODO: use SCIP epsilon methods here
-    auto edge_selected = SCIPgetSolVal(scipSP_, scip_solution, var_X) > 0.5;
-
-    // set incidence of this edge corresponding to current variable
-    schedule->edges[tuple] = edge_selected;
-
-    // add cost to schedule if edge is included, else don't
-    if (edge_selected)
-      schedule->schedule_cost += instance_->stringerCosts[make_tuple(coil_i, mode_i, coil_j, mode_j, line)];
-  }
-
-  // restore delayedness
-  for (auto &[coil_i, var_Z] : vars_Z_)
-  {
-    auto coil_delayed = SCIPgetSolVal(scipSP_, scip_solution, var_Z) > 0.5; // TODO: use SCIP epsilon methods
-
-    schedule->delayedness[coil_i] = coil_delayed;
-  }
-
   iteration_++;
-  return schedule;
+
+  return schedules;
 }

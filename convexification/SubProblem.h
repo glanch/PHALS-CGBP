@@ -13,7 +13,7 @@ public:
     void Setup(shared_ptr<Instance> instance, ProductionLine line);
 
     void UpdateObjective(shared_ptr<DualValues> dual_values, const bool is_farkas);
-    shared_ptr<ProductionLineSchedule> Solve();
+    vector<shared_ptr<ProductionLineSchedule>> Solve();
     
     void SetGap(double gap);
     void ResetDynamicGap();

@@ -2,6 +2,7 @@
 #pragma once
 
 #include <memory>
+#include <mutex>
 
 #include "../Instance.h"
 
@@ -28,6 +29,8 @@ public:
    Master(shared_ptr<Instance> instance); // constructor
 
    ~Master(); // destructor
+   
+   std::mutex mutex_;
 
    SCIP *scipRMP_;      // pointer to the scip environment for the restricted master-problem
    shared_ptr<Instance> instance_; // pointer to the instance
