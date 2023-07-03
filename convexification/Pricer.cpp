@@ -4,7 +4,7 @@
 #include "SubProblemInitialColumns.h"
 #include "SubProblem.h"
 #include "scip/scip.h"
-
+#include <thread>
 #include <boost/range/adaptor/reversed.hpp>
 #include <boost/range/adaptor/filtered.hpp>
 
@@ -263,28 +263,26 @@ SCIP_RESULT MyPricer::Pricing(const bool is_farkas)
   }
 
   // per
-  if (reverse_subproblem_order_)
-  {
-    for (auto &[line, subproblem] : boost::adaptors::reverse(subproblems_))
-    {
-      vector<shared_ptr<ProductionLineSchedule>> schedules;
-      auto scip_status = SolveSubProblem(line, subproblem, is_farkas, schedules);
+  map<ProductionLine, thread> subproblem_threads;
 
-      // auto &line = iter.first;
-      // auto &subproblem = iter.second;
-    }
-  }
-  else
+  for (auto &[line, subproblem] : boost::adaptors::reverse(subproblems_))
   {
-    for (auto &[line, subproblem] : subproblems_)
-    {
-      vector<shared_ptr<ProductionLineSchedule>> schedules;
-      auto scip_status = SolveSubProblem(line, subproblem, is_farkas, schedules);
+    vector<shared_ptr<ProductionLineSchedule>> schedules;
+    subproblem_threads[line] = thread([&, line, &subproblem] {
+      SolveSubProblem( line, subproblem, is_farkas, schedules);
+    });
+    // auto scip_status = SolveSubProblem(line, subproblem, is_farkas, schedules);
 
-      // auto &line = iter.first;
-      // auto &subproblem = iter.second;
-    }
+    // auto &line = iter.first;
+    // auto &subproblem = iter.second;
   }
+
+  for(auto& [line, thread] : subproblem_threads) {
+    thread.join();
+  }
+
+  
+ 
 
   // TODO: check this
   reverse_subproblem_order_ = !reverse_subproblem_order_;
