@@ -143,19 +143,33 @@ SCIP_RESULT MyPricer::SolveSubProblem(ProductionLine line, SubProblem &subproble
   subproblem.ResetDynamicGap();
   bool terminate = false;
   bool column_found = false;
+  int columns_added = 0;
   while (!terminate)
   {
+    {
+      // acquire lock to protect cout
+      std::lock_guard<std::mutex> guard(master_problem_->mutex_);
+      cout << "[Subproblem L" << line << "]: Solving subproblem with dynamic gap of " << subproblem.dynamic_gap_ << endl;
+    }
+
     subproblem.UpdateObjective(dual_values_, is_farkas);
     auto subproblem_solutions = subproblem.Solve();
 
+    {
+      // acquire lock to protect cout
+      std::lock_guard<std::mutex> guard(master_problem_->mutex_);
+      cout << "[Subproblem L" << line << "]: Subproblem solved with " << subproblem_solutions.size() << " feasible solutions" << endl;
+    }
+
+    bool unique_column_with_negative_reduced_cost_found = false;
     // iterate over all solutions
     for (auto &subproblem_solution : subproblem_solutions)
     {
       // add variable if it could happen that selecting it improves the objective
-      // acquire lock
+
       if (subproblem_solution->reduced_cost_negative)
       {
-        // acquire lock, see RAII
+        // acquire lock to protect master problem, see RAII
         std::lock_guard<std::mutex> guard(master_problem_->mutex_);
 
         // check if solution is already contained in our generated schedules
@@ -172,6 +186,8 @@ SCIP_RESULT MyPricer::SolveSubProblem(ProductionLine line, SubProblem &subproble
         if (!schedule_contained)
         {
           // add schedule and corresponding variable if it wasn't generated previously
+          cout << "[Subproblem L" << line << "]: One unique column found and added" << endl;
+
           DisplaySchedule(subproblem_solution);
           AddNewVar(subproblem_solution);
 
@@ -180,33 +196,43 @@ SCIP_RESULT MyPricer::SolveSubProblem(ProductionLine line, SubProblem &subproble
 
           terminate = true;
           column_found = true;
+          unique_column_with_negative_reduced_cost_found = true;
+          columns_added++;
         }
         else
         {
-          // the schedule was already generated previously
-          auto old_gap = subproblem.dynamic_gap_;
-          if (old_gap <= Settings::kDynamicGapLowerBound)
-          {
-            // terminate since we already have found the best column in this iteration
-            cout << "Even the schedule with most negative reduced cost within our dynamic gap lower bound of " << Settings::kDynamicGapLowerBound << " was already generated. Skipping this subproblem for line " << subproblem.line_ << endl;
-            terminate = true;
-          }
-          else
-          {
-            subproblem.dynamic_gap_ /= 2;
-
-            auto new_gap = subproblem.dynamic_gap_;
-            cout << "Schedule for line " << subproblem.line_ << " already contained, decreasing dynamic gap from " << old_gap << " to " << new_gap << endl;
-          }
+          cout << "[Subproblem L" << line << "]: One solution column already present" << endl;
         }
-      }
-      else
-      {
-        terminate = true;
       }
     }
 
-    // if 
+    if (!unique_column_with_negative_reduced_cost_found)
+    {
+      // acquire lock to protect cout
+      std::lock_guard<std::mutex> guard(master_problem_->mutex_);
+
+      // if dynamic gap is below cutoff, terminate search
+      auto old_gap = subproblem.dynamic_gap_;
+      if (old_gap <= Settings::kDynamicGapLowerBound)
+      {
+        cout << "[Subproblem L" << line << "]: No unique columns found. Dynamic gap of " << subproblem.dynamic_gap_ << " reached cut-off of " << Settings::kDynamicGapLowerBound << ". Terminating search for this subproblem." << endl;
+        column_found = false;
+
+        terminate = true;
+      }
+      else
+      {
+        // reduce dynamic gap
+        subproblem.dynamic_gap_ /= 2;
+        column_found = false;
+        cout << "[Subproblem L" << line << "]: No unique columns found. Trying with lower dynamic gap from " << old_gap << " to " << subproblem.dynamic_gap_ << endl;
+      }
+    }
+  }
+  // acquire lock to protect cout
+  {
+    std::lock_guard<std::mutex> guard(master_problem_->mutex_);
+    cout << "[Subproblem L" << line << "]: Total of " << columns_added << " number of columns added to subproblem" << endl;
   }
 
   return column_found ? SCIP_SUCCESS : SCIP_DIDNOTFIND;
@@ -268,21 +294,18 @@ SCIP_RESULT MyPricer::Pricing(const bool is_farkas)
   for (auto &[line, subproblem] : boost::adaptors::reverse(subproblems_))
   {
     vector<shared_ptr<ProductionLineSchedule>> schedules;
-    subproblem_threads[line] = thread([&, line, &subproblem] {
-      SolveSubProblem( line, subproblem, is_farkas, schedules);
-    });
+    subproblem_threads[line] = thread([&]
+                                      { SolveSubProblem(line, subproblem, is_farkas, schedules); });
     // auto scip_status = SolveSubProblem(line, subproblem, is_farkas, schedules);
 
     // auto &line = iter.first;
     // auto &subproblem = iter.second;
   }
 
-  for(auto& [line, thread] : subproblem_threads) {
+  for (auto &[line, thread] : subproblem_threads)
+  {
     thread.join();
   }
-
-  
- 
 
   // TODO: check this
   reverse_subproblem_order_ = !reverse_subproblem_order_;

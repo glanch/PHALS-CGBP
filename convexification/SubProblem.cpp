@@ -516,8 +516,6 @@ void SubProblem::UpdateObjective(shared_ptr<DualValues> dual_values, const bool 
 vector<shared_ptr<ProductionLineSchedule>> SubProblem::Solve()
 {
   vector<shared_ptr<ProductionLineSchedule>> schedules;
-
-  cout << "Solving subproblem for line " << line_ << " with dynamic gap " << dynamic_gap_ << endl;
   this->SetGap(dynamic_gap_);
 
   char model_name[Settings::kSCIPMaxStringLength];
