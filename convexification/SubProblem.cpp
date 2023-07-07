@@ -102,6 +102,9 @@ void SubProblem::Setup(shared_ptr<Instance> instance, ProductionLine line)
   SCIPsetRealParam(scipSP_, "limits/time", 1e+20); // default 1e+20 s
   SCIPsetRealParam(scipSP_, "limits/gap", 0);      // default 0
   SCIPsetBoolParam(scipSP_, "constraints/countsols/collect", TRUE);
+  
+  SCIPenableReoptimization(scipSP_, TRUE);
+
   // we do not care about solutions, if these have a not negative optimal objfunc-value
   SCIPsetObjlimit(scipSP_, -SCIPepsilon(scipSP_));
 
@@ -461,14 +464,19 @@ SubProblem::~SubProblem()
 // update the objective-function of the Subproblem according to the new DualVariables with SCIPchgVarObj()
 void SubProblem::UpdateObjective(shared_ptr<DualValues> dual_values, const bool is_farkas)
 {
-  SCIPfreeTransform(scipSP_); // enable modifications
+  SCIPfreeReoptSolve(scipSP_);
+  // SCIPfreeTransform(scipSP_); // enable modifications
 
   // Z variables
   for (auto coil_i : instance_->coils)
   {
     // both delay coils constraint and original variable constraint duals need to be respected here
     // but only if coil_i is a regular coil, if not, don't consider dual of max delay constraint
-    SCIPchgVarObj(scipSP_, vars_Z_[coil_i], -(instance_->IsRegularCoil(coil_i) ? dual_values->pi_max_delayed_coils_ : 0) + dual_values->pi_original_var_Z[coil_i]);
+
+    auto var = vars_Z_[coil_i];
+    auto coefficient = -(instance_->IsRegularCoil(coil_i) ? dual_values->pi_max_delayed_coils_ : 0) + dual_values->pi_original_var_Z[coil_i];
+
+    SCIPchgReoptObjective(scipSP_, SCIP_OBJSENSE_MINIMIZE, &var, &coefficient, 1);
   }
 
   // S variables don't occur in the MP, so no coefficients in reduced cost term
@@ -506,11 +514,16 @@ void SubProblem::UpdateObjective(shared_ptr<DualValues> dual_values, const bool 
       if (is_farkas)
         column_cost = 0;
     }
-    SCIPchgVarObj(scipSP_, var_X, column_cost - dual_cost - original_var_cost);
+    
+    auto coefficient = column_cost - dual_cost - original_var_cost;
+
+    SCIPchgReoptObjective(scipSP_, SCIP_OBJSENSE_MINIMIZE, &var_X, &coefficient, 1);
   }
 
   // convexity constraint for this line
-  SCIPchgVarObj(scipSP_, var_constant_one_, -dual_values->pi_convexity_[line_]);
+  auto coefficient = -dual_values->pi_convexity_[line_];
+
+  SCIPchgReoptObjective(scipSP_, SCIP_OBJSENSE_MINIMIZE, &var_constant_one_, &coefficient, 1);
 }
 
 vector<shared_ptr<ProductionLineSchedule>> SubProblem::Solve()
