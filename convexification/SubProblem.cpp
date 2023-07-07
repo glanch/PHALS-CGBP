@@ -9,6 +9,13 @@ void SubProblem::SetGap(double gap)
   SCIPsetRealParam(scipSP_, "limits/gap", gap_); // default 0
 }
 
+void SubProblem::SetTimeLimit(double time_limit) {
+  SCIPsetRealParam(scipSP_, "limits/time", time_limit); // default 0
+}
+
+void SubProblem::ResetTimeLimit() {
+  SCIPsetRealParam(scipSP_, "limits/time", 1e+20);    // default 1e+20 s
+}
 void SubProblem::ResetDynamicGap()
 {
   dynamic_gap_ = Settings::kDynamicGap;
@@ -531,12 +538,20 @@ vector<shared_ptr<ProductionLineSchedule>> SubProblem::Solve()
   auto best_solution = SCIPgetBestSol(scipSP_);
   auto number_of_solutions = SCIPgetNSols(scipSP_);
 
+  // return if no solutions found
+  if(number_of_solutions == 0 || best_solution == NULL) 
+    return schedules;
+
+
   auto solutions = SCIPgetSols(scipSP_);
   // loop through every solution
+  // explicitly include best solution by initializing solution_index to -1
   for (int solution_index = 0; solution_index < number_of_solutions; solution_index++)
   {
+    
     // get solution from scip
-    auto scip_solution = solutions[solution_index];
+    // if solution_index == -1, i.e. first iteration, take best solution
+    auto scip_solution = solution_index == -1 ? best_solution : solutions[solution_index];
 
     // restore solution
     // allocate memory for schedule / column

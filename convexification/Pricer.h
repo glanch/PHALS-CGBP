@@ -77,4 +77,6 @@ private:
    int farkas_iteration_ = 0;
    void foo();
    SCIP_RESULT SolveSubProblem(ProductionLine line, SubProblem& subproblem, bool is_farkas, vector<shared_ptr<ProductionLineSchedule>> solutions);
+
+   bool CheckSolutionAlreadyPresent(ProductionLine& line, shared_ptr<ProductionLineSchedule>& solution);
 };

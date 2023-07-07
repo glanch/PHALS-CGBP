@@ -17,6 +17,9 @@ public:
     
     void SetGap(double gap);
     void ResetDynamicGap();
+    
+    void SetTimeLimit(double time_limit);
+    void ResetTimeLimit();
     double dynamic_gap_ = Settings::kDynamicGap;
     
     ProductionLine line_;
@@ -44,6 +47,6 @@ private:
     void CreateZVariable(Coil coil_i);
     void CreateSVariable(Coil coil_i);
     void CreateXVariable(Coil coil_i, Coil coil_j, ProductionLine line, Mode mode_i, Mode mode_j);
-
+    
     int gap_ = 0;
 };

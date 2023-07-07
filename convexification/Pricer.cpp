@@ -18,6 +18,18 @@ bool map_compare(Map const &lhs, Map const &rhs)
   return lhs.size() == rhs.size() && std::equal(lhs.begin(), lhs.end(),
                                                 rhs.begin());
 }
+bool MyPricer::CheckSolutionAlreadyPresent(ProductionLine &line, shared_ptr<ProductionLineSchedule> &solution)
+{
+  for (auto &existing_schedule : master_problem_->schedules_[line])
+  {
+    if (map_compare(existing_schedule->edges, solution->edges))
+    {
+      return true;
+    }
+  }
+
+  return false;
+}
 
 MyPricer::MyPricer(shared_ptr<Master> master_problem, const char *pricer_name, const char *pricer_desc, int pricer_priority, SCIP_Bool pricer_delay)
     : ObjPricer(master_problem->scipRMP_, pricer_name, pricer_desc, pricer_priority, pricer_delay), // TRUE : LP is re-optimized each time a variable is added
@@ -137,9 +149,65 @@ SCIP_RETCODE MyPricer::scip_init(SCIP *scip, SCIP_PRICER *pricer)
 }
 SCIP_RESULT MyPricer::SolveSubProblem(ProductionLine line, SubProblem &subproblem, bool is_farkas, vector<shared_ptr<ProductionLineSchedule>> solutions)
 {
+
+  // try time limited initial solve
+  subproblem.dynamic_gap_ = Settings::kInitialSolveGap;
+  subproblem.SetTimeLimit(Settings::kInitialSolveTimeTimeLimitInSeconds);
+  subproblem.UpdateObjective(dual_values_, is_farkas);
+  cout << "[Subproblem L" << line << "]: Initial Solving. Trying to solve subproblem with gap " << Settings::kInitialSolveGap << " and time limit " << Settings::kInitialSolveTimeTimeLimitInSeconds << endl;
+
+  auto subproblem_solutions = subproblem.Solve();
+  {
+    // acquire lock to protect cout
+    std::lock_guard<std::mutex> guard(master_problem_->mutex_);
+    cout << "[Subproblem L" << line << "]: Initial Solving. Trying to solve subproblem solved with " << subproblem_solutions.size() << " feasible solutions" << endl;
+  }
+
+  bool initial_solving_column_found = false;
+  // iterate over all solutions
+  for (auto &subproblem_solution : subproblem_solutions)
+  {
+    // add variable if it could happen that selecting it improves the objective
+
+    if (subproblem_solution->reduced_cost_negative)
+    {
+      // acquire lock to protect master problem, see RAII
+      std::lock_guard<std::mutex> guard(master_problem_->mutex_);
+
+      // check if solution is already contained in our generated schedules
+      bool schedule_contained = CheckSolutionAlreadyPresent(line, subproblem_solution);
+
+      if (!schedule_contained)
+      {
+        // add schedule and corresponding variable if it wasn't generated previously
+        cout << "[Subproblem L" << line << "]: Initial Solving. One unique column found and added" << endl;
+
+        DisplaySchedule(subproblem_solution);
+        AddNewVar(subproblem_solution);
+
+        // add to output vector
+        solutions.push_back(subproblem_solution);
+
+        initial_solving_column_found = true;
+      }
+      else
+      {
+        cout << "[Subproblem L" << line << "]: Initial Solving. One solution column with rc=" << subproblem_solution->reduced_cost << " already present" << endl;
+      }
+    }
+  }
+
+  if(initial_solving_column_found) {
+    return SCIP_SUCCESS;
+  }
+
+  // run heuristic
   // run until terminate is true
   // if a new column was found
   // or if dynamic gap was reduced to 0 and still only an existing column was found
+
+  subproblem.ResetTimeLimit();
+  subproblem.SetTimeLimit(Settings::kDynamicGapTimeLimitInSeconds);
   subproblem.ResetDynamicGap();
   bool terminate = false;
   bool column_found = false;
@@ -173,15 +241,7 @@ SCIP_RESULT MyPricer::SolveSubProblem(ProductionLine line, SubProblem &subproble
         std::lock_guard<std::mutex> guard(master_problem_->mutex_);
 
         // check if solution is already contained in our generated schedules
-        bool schedule_contained = false;
-        for (auto &schedule : master_problem_->schedules_[line])
-        {
-          if (map_compare(schedule->edges, subproblem_solution->edges))
-          {
-            schedule_contained = true;
-            break;
-          }
-        }
+        bool schedule_contained = CheckSolutionAlreadyPresent(line, subproblem_solution);
 
         if (!schedule_contained)
         {
@@ -201,7 +261,7 @@ SCIP_RESULT MyPricer::SolveSubProblem(ProductionLine line, SubProblem &subproble
         }
         else
         {
-          cout << "[Subproblem L" << line << "]: One solution column already present" << endl;
+          cout << "[Subproblem L" << line << "]: One solution column with rc=" << subproblem_solution->reduced_cost << " already present" << endl;
         }
       }
     }
