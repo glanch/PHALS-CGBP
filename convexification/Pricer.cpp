@@ -42,7 +42,7 @@ void MyPricer::PrintMasterBounds(bool is_farkas)
   cout << "MyPricer::" << (is_farkas ? "scip_farkas" : "scip_redcost") << " was called" << endl
        << "Pricer Iteration total: \t" << (redcost_iteration_ + farkas_iteration_) << "" << endl
        << "\t current farkas: \t" << farkas_iteration_ << "" << endl
-       << "\t current redcost:\t" << (farkas_iteration_ + redcost_iteration_) << "" << endl
+       << "\t current redcost:\t" << redcost_iteration_ << "" << endl
        << endl
        << "Current Bounds" << endl
        << "Primal (objective current incumbent): \t" << primal_bound << endl
