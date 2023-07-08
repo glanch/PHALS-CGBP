@@ -4,6 +4,7 @@ namespace Settings
 {
     constexpr int kSCIPMaxStringLength = 1024;
     constexpr double kBigM = 1000;
+
     
     constexpr bool kGenerateInitialTrivialColumn = false;
 
@@ -15,4 +16,5 @@ namespace Settings
     constexpr double kInitialSolveGap = 0;
     constexpr double kInitialSolveTimeTimeLimitInSeconds = 0;
     constexpr bool kInitialSolveEnabled = false;
+    constexpr bool kOnlyInitialSolve = false;
 }
