@@ -204,7 +204,12 @@ SCIP_RESULT MyPricer::SolveSubProblem(ProductionLine line, SubProblem &subproble
     {
       return SCIP_SUCCESS;
     }
+
+    if(kOnlyInitialSolve) {
+      return SCIP_DIDNOTFIND;
+    }
   }
+
 
   // run heuristic
   // run until terminate is true
