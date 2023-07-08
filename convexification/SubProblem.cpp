@@ -101,7 +101,7 @@ void SubProblem::Setup(shared_ptr<Instance> instance, ProductionLine line)
   // first generate the Subproblem with the method of the compact Model
   SCIPcreate(&scipSP_);
   SCIPincludeDefaultPlugins(scipSP_);
-  SCIPcreateProbBasic(scipSP_, "Subproblem BPP");
+  SCIPcreateProbBasic(scipSP_, "Subproblem PHALS");
 
   // set all optional SCIPParameters
   SCIPsetIntParam(scipSP_, "display/verblevel", 0);

@@ -149,56 +149,59 @@ SCIP_RETCODE MyPricer::scip_init(SCIP *scip, SCIP_PRICER *pricer)
 }
 SCIP_RESULT MyPricer::SolveSubProblem(ProductionLine line, SubProblem &subproblem, bool is_farkas, vector<shared_ptr<ProductionLineSchedule>> solutions)
 {
-
-  // try time limited initial solve
-  subproblem.dynamic_gap_ = Settings::kInitialSolveGap;
-  subproblem.SetTimeLimit(Settings::kInitialSolveTimeTimeLimitInSeconds);
-  subproblem.UpdateObjective(dual_values_, is_farkas);
-  cout << "[Subproblem L" << line << "]: Initial Solving. Trying to solve subproblem with gap " << Settings::kInitialSolveGap << " and time limit " << Settings::kInitialSolveTimeTimeLimitInSeconds << endl;
-
-  auto subproblem_solutions = subproblem.Solve();
+  if (Settings::kInitialSolveEnabled)
   {
-    // acquire lock to protect cout
-    std::lock_guard<std::mutex> guard(master_problem_->mutex_);
-    cout << "[Subproblem L" << line << "]: Initial Solving. Trying to solve subproblem solved with " << subproblem_solutions.size() << " feasible solutions" << endl;
-  }
+    // try time limited initial solve
+    subproblem.dynamic_gap_ = Settings::kInitialSolveGap;
+    subproblem.SetTimeLimit(Settings::kInitialSolveTimeTimeLimitInSeconds);
+    subproblem.UpdateObjective(dual_values_, is_farkas);
+    cout << "[Subproblem L" << line << "]: Initial Solving. Trying to solve subproblem with gap " << Settings::kInitialSolveGap << " and time limit " << Settings::kInitialSolveTimeTimeLimitInSeconds << endl;
 
-  bool initial_solving_column_found = false;
-  // iterate over all solutions
-  for (auto &subproblem_solution : subproblem_solutions)
-  {
-    // add variable if it could happen that selecting it improves the objective
-
-    if (subproblem_solution->reduced_cost_negative)
+    auto subproblem_solutions = subproblem.Solve();
     {
-      // acquire lock to protect master problem, see RAII
+      // acquire lock to protect cout
       std::lock_guard<std::mutex> guard(master_problem_->mutex_);
+      cout << "[Subproblem L" << line << "]: Initial Solving. Trying to solve subproblem solved with " << subproblem_solutions.size() << " feasible solutions" << endl;
+    }
 
-      // check if solution is already contained in our generated schedules
-      bool schedule_contained = CheckSolutionAlreadyPresent(line, subproblem_solution);
+    bool initial_solving_column_found = false;
+    // iterate over all solutions
+    for (auto &subproblem_solution : subproblem_solutions)
+    {
+      // add variable if it could happen that selecting it improves the objective
 
-      if (!schedule_contained)
+      if (subproblem_solution->reduced_cost_negative)
       {
-        // add schedule and corresponding variable if it wasn't generated previously
-        cout << "[Subproblem L" << line << "]: Initial Solving. One unique column found and added" << endl;
+        // acquire lock to protect master problem, see RAII
+        std::lock_guard<std::mutex> guard(master_problem_->mutex_);
 
-        DisplaySchedule(subproblem_solution);
-        AddNewVar(subproblem_solution);
+        // check if solution is already contained in our generated schedules
+        bool schedule_contained = CheckSolutionAlreadyPresent(line, subproblem_solution);
 
-        // add to output vector
-        solutions.push_back(subproblem_solution);
+        if (!schedule_contained)
+        {
+          // add schedule and corresponding variable if it wasn't generated previously
+          cout << "[Subproblem L" << line << "]: Initial Solving. One unique column found and added" << endl;
 
-        initial_solving_column_found = true;
-      }
-      else
-      {
-        cout << "[Subproblem L" << line << "]: Initial Solving. One solution column with rc=" << subproblem_solution->reduced_cost << " already present" << endl;
+          DisplaySchedule(subproblem_solution);
+          AddNewVar(subproblem_solution);
+
+          // add to output vector
+          solutions.push_back(subproblem_solution);
+
+          initial_solving_column_found = true;
+        }
+        else
+        {
+          cout << "[Subproblem L" << line << "]: Initial Solving. One solution column with rc=" << subproblem_solution->reduced_cost << " already present" << endl;
+        }
       }
     }
-  }
 
-  if(initial_solving_column_found) {
-    return SCIP_SUCCESS;
+    if (initial_solving_column_found)
+    {
+      return SCIP_SUCCESS;
+    }
   }
 
   // run heuristic
@@ -212,8 +215,10 @@ SCIP_RESULT MyPricer::SolveSubProblem(ProductionLine line, SubProblem &subproble
   bool terminate = false;
   bool column_found = false;
   int columns_added = 0;
-  while (!terminate)
+  int round_counter = 0;
+  while (!terminate && round_counter < Settings::kDynamicGapMaxRounds)
   {
+    round_counter++;
     {
       // acquire lock to protect cout
       std::lock_guard<std::mutex> guard(master_problem_->mutex_);
@@ -279,6 +284,12 @@ SCIP_RESULT MyPricer::SolveSubProblem(ProductionLine line, SubProblem &subproble
         column_found = false;
 
         terminate = true;
+      }else if(round_counter >= Settings::kDynamicGapMaxRounds)
+      {
+        // reduce dynamic gap
+        subproblem.dynamic_gap_ /= 2;
+        column_found = false;
+        cout << "[Subproblem L" << line << "]: No unique columns found. Max rounds reached of " << Settings::kDynamicGapMaxRounds << " rounds" << endl;
       }
       else
       {
