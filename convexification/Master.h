@@ -73,4 +73,10 @@ public:
 
    bool initial_column_heuristic_tried_ = false;
    bool initial_column_heuristic_enabled_ = false;
+   
+   void StartTimer();
+   SCIP_Real MeasureTime(string description);
+   void RestartTimer();
+   SCIP_CLOCK* master_round_clock;
+   vector<tuple<string, double>> master_round_timings_in_seconds;
 };

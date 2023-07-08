@@ -45,8 +45,10 @@ MyPricer::MyPricer(shared_ptr<Master> master_problem, const char *pricer_name, c
     this->subproblems_initial_columns_[line].Setup(instance_, line);
   }
 }
-void MyPricer::PrintMasterBounds(bool is_farkas)
+void MyPricer::PrintMasterBoundsAndMeasure(bool is_farkas)
 {
+  master_problem_->MeasureTime(is_farkas ? "Before Farkas Pricing" : "Before RedCost");
+  
   auto dual_bound = SCIPgetDualbound(scipRMP_);
   auto avg_dual_bound = SCIPgetAvgDualbound(scipRMP_);
   auto primal_bound = SCIPgetPrimalbound(scipRMP_);
@@ -403,7 +405,7 @@ SCIP_RETCODE MyPricer::scip_redcost(SCIP *scip,
                                     SCIP_RESULT *result)
 {
 
-  PrintMasterBounds(false);
+  PrintMasterBoundsAndMeasure(false);
 
   // start dual-pricing with isFarkas-Flag = false
   *result = Pricing(false);
@@ -411,6 +413,8 @@ SCIP_RETCODE MyPricer::scip_redcost(SCIP *scip,
   cout << endl;
 
   redcost_iteration_++;
+
+  master_problem_->RestartTimer();
   return SCIP_OKAY;
 }
 
@@ -427,7 +431,7 @@ SCIP_RETCODE MyPricer::scip_redcost(SCIP *scip,
  */
 SCIP_RETCODE MyPricer::scip_farkas(SCIP *scip, SCIP_PRICER *pricer, SCIP_RESULT *result)
 {
-  PrintMasterBounds(true);
+  PrintMasterBoundsAndMeasure(true);
 
   // check if trivial column generation is enabled
   if (Settings::kGenerateInitialTrivialColumn)
@@ -562,6 +566,9 @@ SCIP_RETCODE MyPricer::scip_farkas(SCIP *scip, SCIP_PRICER *pricer, SCIP_RESULT 
   }
 
   farkas_iteration_++;
+
+  // start measuring master again
+  master_problem_->RestartTimer();
   return SCIP_OKAY;
 }
 

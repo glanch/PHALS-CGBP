@@ -1,7 +1,7 @@
 #include "Master.h"
 #include "../Settings.h"
 #include <scip/scip_cons.h>
-
+#include <numeric>
 void Master::CreateZVariable(Coil coil_i)
 {
    assert(vars_Z_.count(coil_i) == 0);
@@ -19,7 +19,7 @@ void Master::CreateZVariable(Coil coil_i)
                  0,                    // lower bound
                  1,                    // upper bound
                  0,                    // objective function coefficient, equal to 0 according to model
-                 SCIP_VARTYPE_INTEGER, // variable type
+                 SCIP_VARTYPE_IMPLINT, // variable type
                  true,
                  false,
                  NULL,
@@ -339,6 +339,9 @@ Master::Master(shared_ptr<Instance> instance) : instance_(instance), initial_col
 
    // generate a file to show the LP-Program that is build. "FALSE" = we get our specific choosen names.
    SCIPwriteOrigProblem(scipRMP_, "original_RMP_bpp.lp", "lp", FALSE);
+
+   // create timer 
+   SCIPcreateClock(scipRMP_, &master_round_clock);
 }
 
 /**
@@ -406,6 +409,10 @@ Master::~Master()
 
    SCIPreleaseVar(scipRMP_, &var_constant_one_);
 
+   // free clock 
+   SCIPfreeClock(scipRMP_, &master_round_clock);
+
+   // free instance   
    SCIPfree(&scipRMP_);
 }
 
@@ -414,7 +421,28 @@ void Master::Solve()
 {
    cout << "___________________________________________________________________________________________\n";
    cout << "start Solving ColumnGeneration: \n";
+
+   // start timer by calling restart
+   RestartTimer();
+
    SCIPsolve(scipRMP_);
+
+   // measure time after solution
+   auto last_measure = MeasureTime("Master Last Measure");
+   
+   double total_time = 0.0;
+
+   cout << "Master Timings" << endl;
+   for(auto& [description, measured_time] : master_round_timings_in_seconds) {
+      cout << description << ": " << measured_time << "s" << endl;
+      total_time += measured_time;
+      
+   }
+   // write measure out
+   auto total_solving_time = SCIPgetSolvingTime(scipRMP_);
+
+   cout << "=== TOTAL TIME IN LP SOLVING === " << std::fixed << total_time << endl;
+   cout << "=== TOTAL TIME IN B&P === " << std::fixed << total_solving_time << endl;
 }
 
 /**
@@ -496,8 +524,10 @@ tuple<bool, Coil, Mode, Mode> Master::FindSucessorCoil(SCIP_Sol *solution, Coil 
 
 void Master::DisplaySolution()
 {
+   SCIPprintPricerStatistics(scipRMP_, NULL);
    
    SCIPprintBestSol(scipRMP_, NULL, FALSE);
+   cout << "Time: " << SCIPgetDeterministicTime(scipRMP_);
 
    SCIP_SOL *solution = SCIPgetBestSol(scipRMP_);
 
@@ -549,3 +579,16 @@ void Master::DisplaySolution()
    }
    cout << "Total cost: " << total_cost << endl;
 };
+
+SCIP_Real Master::MeasureTime(string description) {
+   SCIPstopClock(scipRMP_, master_round_clock);
+   auto measured_time = SCIPgetClockTime(scipRMP_, master_round_clock);
+
+   master_round_timings_in_seconds.push_back(make_tuple(description, measured_time));
+
+   return measured_time;
+}
+void Master::RestartTimer() {
+   SCIPresetClock(scipRMP_, master_round_clock);
+   SCIPstartClock(scipRMP_, master_round_clock);
+}

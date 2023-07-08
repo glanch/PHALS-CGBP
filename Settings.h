@@ -5,7 +5,7 @@ namespace Settings
     constexpr int kSCIPMaxStringLength = 1024;
     constexpr double kBigM = 1000;
     
-    constexpr bool kGenerateInitialTrivialColumn = true;
+    constexpr bool kGenerateInitialTrivialColumn = false;
 
     constexpr double kDynamicGapMaxRounds = 5;
     constexpr double kDynamicGap = 50;
