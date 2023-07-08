@@ -2,10 +2,14 @@
 #include "compact/CompactModel.h"
 #include "convexification/Master.h"
 #include "convexification/Pricer.h"
-int main()
+int main(int argc, char *argv[])
 {
+
+    auto default_instance = "../data/Ins_8.cal";
+
     auto instance = make_shared<Instance>();
-    instance->read("../data/Ins_8.cal");
+
+    instance->read(argc >= 2 ? argv[1] : default_instance);
 
     auto compact_model = make_unique<CompactModel>(instance);
 
