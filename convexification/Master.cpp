@@ -530,8 +530,8 @@ tuple<bool, Coil, Mode, Mode> Master::FindSucessorCoil(SCIP_Sol *solution, Coil 
 
 void Master::DisplaySolution()
 {
+   cout "=== STATS ===" << endl;
    SCIPprintPricerStatistics(scipRMP_, NULL);
-   
    SCIPprintBestSol(scipRMP_, NULL, FALSE);
    cout << "Time: " << SCIPgetDeterministicTime(scipRMP_);
 
