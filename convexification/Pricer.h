@@ -75,7 +75,7 @@ private:
    bool reverse_subproblem_order_ = false;
    int redcost_iteration_ = 0;
    int farkas_iteration_ = 0;
-   void foo();
+
    SCIP_RESULT SolveSubProblem(ProductionLine line, SubProblem& subproblem, bool is_farkas, vector<shared_ptr<ProductionLineSchedule>> solutions, condition_variable& search_terminated);
 
    bool CheckSolutionAlreadyPresent(ProductionLine& line, shared_ptr<ProductionLineSchedule>& solution);

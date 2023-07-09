@@ -160,13 +160,18 @@ SCIP_RESULT MyPricer::SolveSubProblem(ProductionLine line, SubProblem &subproble
     subproblem.dynamic_gap_ = Settings::kInitialSolveGap;
     subproblem.SetTimeLimit(Settings::kInitialSolveTimeTimeLimitInSeconds);
     subproblem.UpdateObjective(dual_values_, is_farkas);
-    cout << "[Subproblem L" << line << "]: Initial Solving. Trying to solve subproblem with gap " << Settings::kInitialSolveGap << " and time limit " << Settings::kInitialSolveTimeTimeLimitInSeconds << endl;
+
+    {
+      // acquire lock to protect cout
+      std::lock_guard<std::mutex> guard(master_problem_->mutex_);
+      cout << "[Subproblem L" << line << "]: Initial Solving. Trying to solve subproblem with gap " << Settings::kInitialSolveGap << " and time limit " << Settings::kInitialSolveTimeTimeLimitInSeconds << endl;
+    }
 
     auto subproblem_solutions = subproblem.Solve();
     {
       // acquire lock to protect cout
       std::lock_guard<std::mutex> guard(master_problem_->mutex_);
-      cout << "[Subproblem L" << line << "]: Initial Solving. Trying to solve subproblem solved with " << subproblem_solutions.size() << " feasible solutions" << endl;
+      cout << "[Subproblem L" << line << "]: Initial Solving. Subproblem solved with " << subproblem_solutions.size() << " feasible solutions" << endl;
     }
 
     bool initial_solving_column_found = false;
@@ -217,6 +222,9 @@ SCIP_RESULT MyPricer::SolveSubProblem(ProductionLine line, SubProblem &subproble
     // if the solution process was interrupted, stop here
     if (subproblem.WasInterrupted())
     {
+      std::lock_guard<std::mutex> guard(master_problem_->mutex_);
+      cout << "[Subproblem L" << line << "]: Initial Solving. Further solution process was interrupted. Stopping here." << endl;
+
       return SCIP_DIDNOTFIND;
     }
   }
@@ -415,6 +423,17 @@ SCIP_RESULT MyPricer::Pricing(const bool is_farkas)
 
   if (Settings::kEnableSubproblemInterruption)
   {
+    // single thread for joining all threads, after that call signal termination
+    auto join_thread = thread([&]
+                              {
+                                for (auto &[line, thread] : subproblem_threads)
+                                {
+                                  thread.join();
+                                }
+
+                                search_terminated.notify_all();
+                              });
+
     // wait for some subproblem to return with found columns
     std::unique_lock<std::mutex> termination_lock{termination_mutex};
     search_terminated.wait(termination_lock);
@@ -424,12 +443,17 @@ SCIP_RESULT MyPricer::Pricing(const bool is_farkas)
     {
       subproblem.InterruptSolving();
     }
-  }
 
-  // wait for all threads to finish gracefully
-  for (auto &[line, thread] : subproblem_threads)
+    // implicitly wait for all other threads to finish
+    join_thread.join();
+  }
+  else
   {
-    thread.join();
+    // wait for all threads to finish gracefully
+    for (auto &[line, thread] : subproblem_threads)
+    {
+      thread.join();
+    }
   }
 
   return SCIP_SUCCESS;
