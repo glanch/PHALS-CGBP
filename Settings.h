@@ -21,4 +21,6 @@ namespace Settings
     constexpr bool kEnableSubproblemInterruption = false;
 
     constexpr double kDefaultMasterTimeLimit = 1e+20;
+    
+    constexpr bool kReconstructScheduleFromSolution = false;
 }

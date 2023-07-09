@@ -340,7 +340,7 @@ Master::Master(shared_ptr<Instance> instance) : instance_(instance), initial_col
    // generate a file to show the LP-Program that is build. "FALSE" = we get our specific choosen names.
    SCIPwriteOrigProblem(scipRMP_, "original_RMP_bpp.lp", "lp", FALSE);
 
-   // create timer 
+   // create timer
    SCIPcreateClock(scipRMP_, &master_round_clock);
 }
 
@@ -409,10 +409,10 @@ Master::~Master()
 
    SCIPreleaseVar(scipRMP_, &var_constant_one_);
 
-   // free clock 
+   // free clock
    SCIPfreeClock(scipRMP_, &master_round_clock);
 
-   // free instance   
+   // free instance
    SCIPfree(&scipRMP_);
 }
 
@@ -426,23 +426,21 @@ void Master::Solve(double time_limit)
    // set time limit
    SCIPsetRealParam(scipRMP_, "limits/time", time_limit);
 
-
    // start timer by calling restart
    RestartTimer();
-
 
    SCIPsolve(scipRMP_);
 
    // measure time after solution
    auto last_measure = MeasureTime("Master Last Measure");
-   
+
    double total_time = 0.0;
 
    cout << "Master Timings" << endl;
-   for(auto& [description, measured_time] : master_round_timings_in_seconds) {
+   for (auto &[description, measured_time] : master_round_timings_in_seconds)
+   {
       cout << description << ": " << measured_time << "s" << endl;
       total_time += measured_time;
-      
    }
    // write measure out
    auto total_solving_time = SCIPgetSolvingTime(scipRMP_);
@@ -537,56 +535,62 @@ void Master::DisplaySolution()
 
    SCIP_SOL *solution = SCIPgetBestSol(scipRMP_);
 
-   cout << endl
-        << endl;
-   cout << "==== Coil Assignment ====" << endl;
-   
-   double total_cost = 0;
-   for (auto &line : instance_->productionLines)
+   if (Settings::kReconstructScheduleFromSolution)
    {
-      // calculate total cost and find successor coils, starting from coil_i=0, mode=0
-      double line_cost = 0;
-      cout << "Line " << line << endl;
-      Coil coil_i = instance_->startCoil;
-      auto [found, coil_j, mode_i, mode_j] = FindSucessorCoil(solution, coil_i, line);
 
-      assert(found);
+      cout << endl
+           << endl;
 
-      while (coil_i != instance_->endCoil)
-      {
-         line_cost += instance_->stringerCosts[make_tuple(coil_i, mode_i, coil_j, mode_j, line)];
-         if (coil_i == instance_->startCoil)
-         {
-            cout << "Start";
-         }
-         else
-         {
-            cout << "C" << coil_i << "M" << mode_i;
-            // cout << " t=" << SCIPgetSolVal(scipRMP_, solution, vars_S_[coil_i]);
-            if (SCIPgetSolVal(scipRMP_, solution, vars_Z_[coil_i]) > 0.5)
-               cout << " delayed";
-         }
-         cout << " -> ";
-         coil_i = coil_j;
-
-         auto [found_new, coil_j_new, mode_i_new, mode_j_new] = FindSucessorCoil(solution, coil_i, line);
-         found = found_new;
-         coil_j = coil_j_new;
-         mode_i = mode_i_new;
-         mode_j = mode_j_new;
-      }
-
-      // update total cost
-      total_cost += line_cost;   
-
-      cout << "End" << endl;
-      cout << "Line cost: " << line_cost << endl;
       cout << "==== Coil Assignment ====" << endl;
+
+      double total_cost = 0;
+      for (auto &line : instance_->productionLines)
+      {
+         // calculate total cost and find successor coils, starting from coil_i=0, mode=0
+         double line_cost = 0;
+         cout << "Line " << line << endl;
+         Coil coil_i = instance_->startCoil;
+         auto [found, coil_j, mode_i, mode_j] = FindSucessorCoil(solution, coil_i, line);
+
+         assert(found);
+
+         while (coil_i != instance_->endCoil)
+         {
+            line_cost += instance_->stringerCosts[make_tuple(coil_i, mode_i, coil_j, mode_j, line)];
+            if (coil_i == instance_->startCoil)
+            {
+               cout << "Start";
+            }
+            else
+            {
+               cout << "C" << coil_i << "M" << mode_i;
+               // cout << " t=" << SCIPgetSolVal(scipRMP_, solution, vars_S_[coil_i]);
+               if (SCIPgetSolVal(scipRMP_, solution, vars_Z_[coil_i]) > 0.5)
+                  cout << " delayed";
+            }
+            cout << " -> ";
+            coil_i = coil_j;
+
+            auto [found_new, coil_j_new, mode_i_new, mode_j_new] = FindSucessorCoil(solution, coil_i, line);
+            found = found_new;
+            coil_j = coil_j_new;
+            mode_i = mode_i_new;
+            mode_j = mode_j_new;
+         }
+
+         // update total cost
+         total_cost += line_cost;
+
+         cout << "End" << endl;
+         cout << "Line cost: " << line_cost << endl;
+         cout << "==== Coil Assignment ====" << endl;
+      }
+      cout << "Total cost: " << total_cost << endl;
    }
-   cout << "Total cost: " << total_cost << endl;
 };
 
-SCIP_Real Master::MeasureTime(string description) {
+SCIP_Real Master::MeasureTime(string description)
+{
    SCIPstopClock(scipRMP_, master_round_clock);
    auto measured_time = SCIPgetClockTime(scipRMP_, master_round_clock);
 
@@ -594,7 +598,8 @@ SCIP_Real Master::MeasureTime(string description) {
 
    return measured_time;
 }
-void Master::RestartTimer() {
+void Master::RestartTimer()
+{
    SCIPresetClock(scipRMP_, master_round_clock);
    SCIPstartClock(scipRMP_, master_round_clock);
 }
