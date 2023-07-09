@@ -220,7 +220,7 @@ SCIP_RESULT MyPricer::SolveSubProblem(ProductionLine line, SubProblem &subproble
     }
 
     // if the solution process was interrupted, stop here
-    if (subproblem.WasInterrupted())
+    if (subproblem.WasInterrupted() && Settings::kEnableSubproblemInterruption)
     {
       std::lock_guard<std::mutex> guard(master_problem_->mutex_);
       cout << "[Subproblem L" << line << "]: Initial Solving. Further solution process was interrupted. Stopping here." << endl;
@@ -328,7 +328,7 @@ SCIP_RESULT MyPricer::SolveSubProblem(ProductionLine line, SubProblem &subproble
       }
     }
 
-    if (!subproblem.WasInterrupted())
+    if (subproblem.WasInterrupted() && Settings::kEnableSubproblemInterruption)
     {
       // if it was interrupted, cancel here
       not_interrupted = false;
@@ -423,6 +423,7 @@ SCIP_RESULT MyPricer::Pricing(const bool is_farkas)
 
   if (Settings::kEnableSubproblemInterruption)
   {
+    // if subproblem interruption is enabled, start watchdog thread and wait for some thread to finish
     // single thread for joining all threads, after that call signal termination
     auto join_thread = thread([&]
                               {
@@ -438,7 +439,7 @@ SCIP_RESULT MyPricer::Pricing(const bool is_farkas)
     std::unique_lock<std::mutex> termination_lock{termination_mutex};
     search_terminated.wait(termination_lock);
 
-    // now request all subproblems to be cancelled
+    // now request all (other) subproblems to be cancelled
     for (auto &[line, subproblem] : subproblems_)
     {
       subproblem.InterruptSolving();
@@ -449,6 +450,7 @@ SCIP_RESULT MyPricer::Pricing(const bool is_farkas)
   }
   else
   {
+    // if not enabled, just wait in serial for all threads to finish
     // wait for all threads to finish gracefully
     for (auto &[line, thread] : subproblem_threads)
     {
@@ -456,7 +458,16 @@ SCIP_RESULT MyPricer::Pricing(const bool is_farkas)
     }
   }
 
-  return SCIP_SUCCESS;
+  // check if any columns were found
+  // for this, check every vector of solutions
+  for (auto &[line, solution] : subproblem_solutions)
+  {
+    if(solution.size() > 0) {
+      return SCIP_SUCCESS;
+    }
+  }
+
+  return SCIP_DIDNOTFIND;
 }
 
 /**
