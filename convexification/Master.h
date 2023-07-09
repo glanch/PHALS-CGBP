@@ -57,7 +57,7 @@ public:
    map<Coil, SCIP_CONS *> cons_original_var_S;
    
    // solve the problem void solve();
-   void Solve();
+   void Solve(double time_limit);
 
    // display the solution
    void DisplaySolution();

@@ -15,8 +15,10 @@ namespace Settings
 
     constexpr double kInitialSolveGap = 0;
     constexpr double kInitialSolveTimeTimeLimitInSeconds = 1e+20;
-    constexpr bool kInitialSolveEnabled = true;
-    constexpr bool kOnlyInitialSolve = true;
+    constexpr bool kInitialSolveEnabled = false;
+    constexpr bool kOnlyInitialSolve = false;
 
-    constexpr bool kEnableSubproblemInterruption = true;
+    constexpr bool kEnableSubproblemInterruption = false;
+
+    constexpr double kDefaultMasterTimeLimit = 1e+20;
 }

@@ -5,7 +5,7 @@
 int main(int argc, char *argv[])
 {
 
-    auto default_instance = "../data/Ins_8.cal";
+    auto default_instance = "../data/Ins_4.cal";
 
     auto instance = make_shared<Instance>();
 
@@ -32,6 +32,6 @@ int main(int argc, char *argv[])
     // activate pricer_VRP_exact_mip
     SCIPactivatePricer(master_problem->scipRMP_, SCIPfindPricer(master_problem->scipRMP_, pricer->pricer_name_));
 
-    master_problem->Solve();
+    master_problem->Solve(argc >= 3 ? stod(argv[2]) : Settings::kDefaultMasterTimeLimit );
     master_problem->DisplaySolution();
 }

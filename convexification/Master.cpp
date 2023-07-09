@@ -417,13 +417,19 @@ Master::~Master()
 }
 
 // solve the problem
-void Master::Solve()
+void Master::Solve(double time_limit)
 {
-   cout << "___________________________________________________________________________________________\n";
-   cout << "start Solving ColumnGeneration: \n";
+   cout << "___________________________________________________________________________________________" << endl;
+   cout << "start Solving ColumnGeneration:" << endl;
+   cout << "Time Limit: " << time_limit << endl;
+
+   // set time limit
+   SCIPsetRealParam(scipRMP_, "limits/time", time_limit);
+
 
    // start timer by calling restart
    RestartTimer();
+
 
    SCIPsolve(scipRMP_);
 
