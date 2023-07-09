@@ -90,6 +90,13 @@ void SubProblem::CreateXVariable(Coil coil_i, Coil coil_j, ProductionLine line, 
   SCIPaddVar(scipSP_, *x_var_pointer);
 }
 
+bool SubProblem::WasInterrupted() {
+  return SCIPisSolveInterrupted(scipSP_);
+}
+void SubProblem::InterruptSolving() {
+  SCIPinterruptSolve(scipSP_);
+}
+
 SubProblem::SubProblem()
 {
 }

@@ -20,6 +20,10 @@ public:
     
     void SetTimeLimit(double time_limit);
     void ResetTimeLimit();
+    bool WasInterrupted();
+    
+    void InterruptSolving();
+
     double dynamic_gap_ = Settings::kDynamicGap;
     
     ProductionLine line_;

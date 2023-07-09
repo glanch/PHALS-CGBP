@@ -5,7 +5,7 @@
 // improving variables and add them to the master problem
 
 #include <algorithm> // for the max()/min() function
-
+#include <condition_variable> // for termination signaling
 // scip includes
 #include "objscip/objscip.h"
 #include "objscip/objscipdefplugins.h"
@@ -76,7 +76,7 @@ private:
    int redcost_iteration_ = 0;
    int farkas_iteration_ = 0;
    void foo();
-   SCIP_RESULT SolveSubProblem(ProductionLine line, SubProblem& subproblem, bool is_farkas, vector<shared_ptr<ProductionLineSchedule>> solutions);
+   SCIP_RESULT SolveSubProblem(ProductionLine line, SubProblem& subproblem, bool is_farkas, vector<shared_ptr<ProductionLineSchedule>> solutions, condition_variable& search_terminated);
 
    bool CheckSolutionAlreadyPresent(ProductionLine& line, shared_ptr<ProductionLineSchedule>& solution);
 };

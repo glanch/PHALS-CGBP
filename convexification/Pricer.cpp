@@ -5,6 +5,9 @@
 #include "SubProblem.h"
 #include "scip/scip.h"
 #include <thread>
+#include <condition_variable>
+#include <mutex>
+
 #include <boost/range/adaptor/reversed.hpp>
 #include <boost/range/adaptor/filtered.hpp>
 
@@ -48,7 +51,7 @@ MyPricer::MyPricer(shared_ptr<Master> master_problem, const char *pricer_name, c
 void MyPricer::PrintMasterBoundsAndMeasure(bool is_farkas)
 {
   master_problem_->MeasureTime(is_farkas ? "Before Farkas Pricing" : "Before RedCost");
-  
+
   auto dual_bound = SCIPgetDualbound(scipRMP_);
   auto avg_dual_bound = SCIPgetAvgDualbound(scipRMP_);
   auto primal_bound = SCIPgetPrimalbound(scipRMP_);
@@ -149,7 +152,7 @@ SCIP_RETCODE MyPricer::scip_init(SCIP *scip, SCIP_PRICER *pricer)
 
   return SCIP_OKAY;
 }
-SCIP_RESULT MyPricer::SolveSubProblem(ProductionLine line, SubProblem &subproblem, bool is_farkas, vector<shared_ptr<ProductionLineSchedule>> solutions)
+SCIP_RESULT MyPricer::SolveSubProblem(ProductionLine line, SubProblem &subproblem, bool is_farkas, vector<shared_ptr<ProductionLineSchedule>> solutions, condition_variable &search_terminated)
 {
   if (Settings::kInitialSolveEnabled)
   {
@@ -202,28 +205,37 @@ SCIP_RESULT MyPricer::SolveSubProblem(ProductionLine line, SubProblem &subproble
 
     if (initial_solving_column_found)
     {
+      search_terminated.notify_all();
       return SCIP_SUCCESS;
     }
 
-    if(kOnlyInitialSolve) {
+    if (Settings::kOnlyInitialSolve)
+    {
+      return SCIP_DIDNOTFIND;
+    }
+
+    // if the solution process was interrupted, stop here
+    if (subproblem.WasInterrupted())
+    {
       return SCIP_DIDNOTFIND;
     }
   }
 
-
   // run heuristic
   // run until terminate is true
   // if a new column was found
+  // or interruption of solution was initiated
   // or if dynamic gap was reduced to 0 and still only an existing column was found
 
   subproblem.ResetTimeLimit();
   subproblem.SetTimeLimit(Settings::kDynamicGapTimeLimitInSeconds);
   subproblem.ResetDynamicGap();
   bool terminate = false;
+  bool not_interrupted = true;
   bool column_found = false;
   int columns_added = 0;
   int round_counter = 0;
-  while (!terminate && round_counter < Settings::kDynamicGapMaxRounds)
+  while (!terminate && round_counter < Settings::kDynamicGapMaxRounds && not_interrupted)
   {
     round_counter++;
     {
@@ -291,7 +303,8 @@ SCIP_RESULT MyPricer::SolveSubProblem(ProductionLine line, SubProblem &subproble
         column_found = false;
 
         terminate = true;
-      }else if(round_counter >= Settings::kDynamicGapMaxRounds)
+      }
+      else if (round_counter >= Settings::kDynamicGapMaxRounds)
       {
         // reduce dynamic gap
         subproblem.dynamic_gap_ /= 2;
@@ -306,6 +319,17 @@ SCIP_RESULT MyPricer::SolveSubProblem(ProductionLine line, SubProblem &subproble
         cout << "[Subproblem L" << line << "]: No unique columns found. Trying with lower dynamic gap from " << old_gap << " to " << subproblem.dynamic_gap_ << endl;
       }
     }
+
+    if (!subproblem.WasInterrupted())
+    {
+      // if it was interrupted, cancel here
+      not_interrupted = false;
+      // acquire lock to protect cout
+      {
+        std::lock_guard<std::mutex> guard(master_problem_->mutex_);
+        cout << "[Subproblem L" << line << "]: Further solution process was interrupted. Stopping here." << endl;
+      }
+    }
   }
   // acquire lock to protect cout
   {
@@ -313,7 +337,15 @@ SCIP_RESULT MyPricer::SolveSubProblem(ProductionLine line, SubProblem &subproble
     cout << "[Subproblem L" << line << "]: Total of " << columns_added << " number of columns added to subproblem" << endl;
   }
 
-  return column_found ? SCIP_SUCCESS : SCIP_DIDNOTFIND;
+  if (column_found)
+  {
+    search_terminated.notify_all();
+    return SCIP_SUCCESS;
+  }
+  else
+  {
+    return SCIP_DIDNOTFIND;
+  }
 }
 /**
  * @brief perform pricing for dual and farkas combined with Flag isFarkas
@@ -366,27 +398,40 @@ SCIP_RESULT MyPricer::Pricing(const bool is_farkas)
                                                       : SCIPgetDualsolLinear(scipRMP_, cons);
   }
 
-  // per
+  // thread per subproblem
+  // solutions per subproblem
   map<ProductionLine, thread> subproblem_threads;
+  map<ProductionLine, vector<shared_ptr<ProductionLineSchedule>>> subproblem_solutions;
 
-  for (auto &[line, subproblem] : boost::adaptors::reverse(subproblems_))
+  // termination signaling see https://stackoverflow.com/a/43617125
+  std::mutex termination_mutex;
+  std::condition_variable search_terminated;
+
+  for (auto &[line, subproblem] : subproblems_)
   {
-    vector<shared_ptr<ProductionLineSchedule>> schedules;
     subproblem_threads[line] = thread([&]
-                                      { SolveSubProblem(line, subproblem, is_farkas, schedules); });
-    // auto scip_status = SolveSubProblem(line, subproblem, is_farkas, schedules);
-
-    // auto &line = iter.first;
-    // auto &subproblem = iter.second;
+                                      { SolveSubProblem(line, subproblem, is_farkas, subproblem_solutions[line], search_terminated); });
   }
 
+  if (Settings::kEnableSubproblemInterruption)
+  {
+    // wait for some subproblem to return with found columns
+    std::unique_lock<std::mutex> termination_lock{termination_mutex};
+    search_terminated.wait(termination_lock);
+
+    // now request all subproblems to be cancelled
+    for (auto &[line, subproblem] : subproblems_)
+    {
+      subproblem.InterruptSolving();
+    }
+  }
+
+  // wait for all threads to finish gracefully
   for (auto &[line, thread] : subproblem_threads)
   {
     thread.join();
   }
 
-  // TODO: check this
-  reverse_subproblem_order_ = !reverse_subproblem_order_;
   return SCIP_SUCCESS;
 }
 
