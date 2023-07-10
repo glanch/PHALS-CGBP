@@ -6,9 +6,9 @@ namespace Settings
     constexpr double kBigM = 1000;
 
     
-    constexpr bool kGenerateInitialTrivialColumn = true;
+    constexpr bool kGenerateInitialTrivialColumn = false;
 
-    constexpr double kDynamicGapMaxRounds = 5;
+    constexpr double kDynamicGapMaxRounds = 20;
     constexpr double kDynamicGap = 50;
     constexpr double kDynamicGapLowerBound = 0.01;
     constexpr double kDynamicGapTimeLimitInSeconds = 60;

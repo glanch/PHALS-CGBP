@@ -79,4 +79,7 @@ private:
    SCIP_RESULT SolveSubProblem(ProductionLine line, SubProblem& subproblem, bool is_farkas, vector<shared_ptr<ProductionLineSchedule>> solutions, condition_variable& search_terminated);
 
    bool CheckSolutionAlreadyPresent(ProductionLine& line, shared_ptr<ProductionLineSchedule>& solution);
+
+   void StartMeasurePricingRound(bool is_farkas);
+   void StopMeasurePricingRound(bool is_farkas);
 };

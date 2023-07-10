@@ -462,7 +462,8 @@ SCIP_RESULT MyPricer::Pricing(const bool is_farkas)
   // for this, check every vector of solutions
   for (auto &[line, solution] : subproblem_solutions)
   {
-    if(solution.size() > 0) {
+    if (solution.size() > 0)
+    {
       return SCIP_SUCCESS;
     }
   }
@@ -492,8 +493,14 @@ SCIP_RETCODE MyPricer::scip_redcost(SCIP *scip,
 
   PrintMasterBoundsAndMeasure(false);
 
+  // start measure pricing round
+  StartMeasurePricingRound(false);
+
   // start dual-pricing with isFarkas-Flag = false
   *result = Pricing(false);
+
+  // stop measure pricing round
+  StopMeasurePricingRound(false);
 
   cout << endl;
 
@@ -517,6 +524,9 @@ SCIP_RETCODE MyPricer::scip_redcost(SCIP *scip,
 SCIP_RETCODE MyPricer::scip_farkas(SCIP *scip, SCIP_PRICER *pricer, SCIP_RESULT *result)
 {
   PrintMasterBoundsAndMeasure(true);
+
+  // start measure pricing round
+  StartMeasurePricingRound(true);
 
   // check if trivial column generation is enabled
   if (Settings::kGenerateInitialTrivialColumn)
@@ -649,6 +659,9 @@ SCIP_RETCODE MyPricer::scip_farkas(SCIP *scip, SCIP_PRICER *pricer, SCIP_RESULT 
 
     cout << endl;
   }
+
+  // stop measure pricing round
+  StopMeasurePricingRound(true);
 
   farkas_iteration_++;
 
@@ -798,4 +811,13 @@ void MyPricer::DisplaySchedule(shared_ptr<ProductionLineSchedule> column)
   }
 
   cout << endl;
+}
+
+void MyPricer::StartMeasurePricingRound(bool is_farkas)
+{
+  master_problem_->RestartTimer();
+}
+void MyPricer::StopMeasurePricingRound(bool is_farkas)
+{
+  master_problem_->MeasureTime(std::string(is_farkas ? "Farkas" : "RedCost") + std::string(" Pricing Round") + std::to_string(is_farkas ? farkas_iteration_ : redcost_iteration_));
 }
