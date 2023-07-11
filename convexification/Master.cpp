@@ -2,9 +2,16 @@
 #include "../Settings.h"
 #include <scip/scip_cons.h>
 #include <numeric>
+/**
+ * @brief Create a original binary Z_i variable and create/add it to the original variable constraint
+ * 
+ * @param coil_i The coil i that the Z_i variable is created for
+ */
 void Master::CreateZVariable(Coil coil_i)
 {
+   // sanity check: don't create variable more than once
    assert(vars_Z_.count(coil_i) == 0);
+
    char var_cons_name[Settings::kSCIPMaxStringLength];
 
    // create Z variable
@@ -32,6 +39,8 @@ void Master::CreateZVariable(Coil coil_i)
 
    // (C) original variable constraints
    // add constraints to orig var constraint
+   // Z_i = 0
+   // since set of lambdas is empty, no other terms in constraint 
    SCIPsnprintf(var_cons_name, Settings::kSCIPMaxStringLength, "orig_var_Z_C%d", coil_i);
 
    SCIPcreateConsLinear(scipRMP_,                     // scip
@@ -57,6 +66,11 @@ void Master::CreateZVariable(Coil coil_i)
    SCIPaddCons(scipRMP_, cons_original_var_Z[coil_i]);
 }
 
+/**
+ * @brief Create a original binary S_i variable and create/add it to the original variable constraint
+ * 
+ * @param coil_i The coil i that the S_i variable is created for
+ */
 void Master::CreateSVariable(Coil coil_i)
 {
    assert(vars_S_.count(coil_i) == 0);
@@ -90,6 +104,9 @@ void Master::CreateSVariable(Coil coil_i)
 
    // (D) original variable constraints
    // add constraints to orig var constraint
+   // S_i = 0
+   // since set of lambdas is empty, no other terms in constraint 
+
    SCIPsnprintf(var_cons_name, Settings::kSCIPMaxStringLength, "orig_var_S_C%d", coil_i);
 
    SCIPcreateConsLinear(scipRMP_,                     // scip
@@ -114,6 +131,16 @@ void Master::CreateSVariable(Coil coil_i)
    SCIPaddCoefLinear(scipRMP_, cons_original_var_S[coil_i], *s_var_pointer, 1);
    SCIPaddCons(scipRMP_, cons_original_var_S[coil_i]);
 }
+
+/**
+ * @brief Create a original binary X_ijkmn variable and create/add it to the original variable constraint
+ * 
+ * @param coil_i Coil i this variable is created for
+ * @param coil_j Coil j this variable is created for
+ * @param line Production line this variable is created for
+ * @param mode_i Mode m of coil i this variable is created for
+ * @param mode_j Mode n of coil j this variable is created for
+ */
 void Master::CreateXVariable(Coil coil_i, Coil coil_j, ProductionLine line, Mode mode_i, Mode mode_j)
 {
    // bounds of variable: if coil_i = coil_j, variable should be equal to 0, else binary, i.e. 0 <= var <= 0
@@ -171,6 +198,12 @@ void Master::CreateXVariable(Coil coil_i, Coil coil_j, ProductionLine line, Mode
    SCIPaddCons(scipRMP_, cons_original_var_X[var_tuple]);
 }
 
+/**
+ * @brief Construct a new Master:: Master object. In this the SCIP object
+ * containing the MIP is created and variables and constraints added.
+ * 
+ * @param instance A reference to the instance the Master problem is created for
+ */
 Master::Master(shared_ptr<Instance> instance) : instance_(instance), initial_column_heuristic_tried_(false)
 {
    // create a SCIP environment and load all defaults
@@ -212,6 +245,7 @@ Master::Master(shared_ptr<Instance> instance) : instance_(instance), initial_col
 
    SCIPaddVar(scipRMP_, var_constant_one_);
 
+   // create X_ijkmn variables
    for (auto &line : instance_->productionLines)
    {
       for (auto &coil_i : instance_->coilsWithoutEndCoil)
@@ -240,20 +274,24 @@ Master::Master(shared_ptr<Instance> instance) : instance_(instance), initial_col
       }
    }
 
+
+   // Create Z_i variable
    for (auto &coil : instance_->coils)
    {
       this->CreateZVariable(coil);
    }
 
-   // we have currently no lambda, cause we are at the beginning of our columnGeneration-Process.
-
-   // still, original variables need to be added
-
+   // we have currently no lambda, cause we are at the beginning of our column generation process.  
+   
    // #####################################################################################################################
    //  Add restrictions
    // #####################################################################################################################
 
    // (2) coil partitioning: every regular coil is produced at exactly one line
+   // for every regular coil i introduce constraint
+   // sum(coil incl. end coil j, line k, mode m of coil i on line k, mode n of coil j on line k) X_ijkmn = 1 
+   // equivalent to
+   // 1<= sum(coil incl. end coil j, line k, mode m of coil i on line k, mode n of coil j on line k) X_ijkmn <= 1
    for (auto &coil_i : instance_->regularCoils)
    {
       SCIPsnprintf(var_cons_name, Settings::kSCIPMaxStringLength, "coil_partitioning_%d", coil_i);
@@ -283,6 +321,7 @@ Master::Master(shared_ptr<Instance> instance) : instance_(instance), initial_col
    }
 
    // (8) max number of delayed columns
+   // -infty sum(regular coil, Z_i) <= alpha
    SCIPsnprintf(var_cons_name, Settings::kSCIPMaxStringLength, "max_delayed_coils");
 
    SCIPcreateConsLinear(scipRMP_,                       // scip
@@ -309,6 +348,10 @@ Master::Master(shared_ptr<Instance> instance) : instance_(instance), initial_col
    SCIPaddCons(scipRMP_, cons_max_delayed_coils_);
 
    // (A) convexity constraints
+   // for every production line, sum of lambda variables = 1
+   // i.e. 1<= sum(production line k, lambdas, 1*lambda) <= 1
+   // currently 0 = 1 since no lambda variable are available yet
+
    for (auto &line : instance_->productionLines)
    {
       SCIPsnprintf(var_cons_name, Settings::kSCIPMaxStringLength, "convexity_L%d", line);
@@ -340,18 +383,14 @@ Master::Master(shared_ptr<Instance> instance) : instance_(instance), initial_col
    // generate a file to show the LP-Program that is build. "FALSE" = we get our specific choosen names.
    SCIPwriteOrigProblem(scipRMP_, "original_RMP_bpp.lp", "lp", FALSE);
 
-   // create timer
+   // create timer for measuring
    SCIPcreateClock(scipRMP_, &master_round_clock);
 }
 
 /**
- * @brief Destroy the Master:: Master object
- *
- * @note This code is a destructor for a class called "Master". It is responsible for releasing all constraints,
- * variables and the SCIP (Solving Constraint Integer Programming) environment associated with the class. For each
- * generated pattern, the corresponding lambda variables (stored in the vector "_var_lambda"), SCIPreleaseVar is called
- * to release it's memory from the SCIP environment. Finally, SCIPfree is called on the SCIP environment itself, which
- * frees any memory associated with the environment. Note that constraints are not freed.
+ * @brief Destroy the Master:: Master object. This destroy the SCIP objects
+ * (object itself, variables, clock and constraints). Every other ressource is
+ * freed automatically if necessary
  */
 Master::~Master()
 {
@@ -417,6 +456,11 @@ Master::~Master()
 }
 
 // solve the problem
+/**
+ * @brief Solve the Master problem using Branch&Price algorithm
+ * 
+ * @param time_limit The time limit after the solution process should terminate
+ */
 void Master::Solve(double time_limit)
 {
    cout << "___________________________________________________________________________________________" << endl;
@@ -429,11 +473,14 @@ void Master::Solve(double time_limit)
    // start timer by calling restart
    RestartTimer();
 
+   // trigger B&P algorithm
    SCIPsolve(scipRMP_);
 
    // measure time after solution
    auto last_measure = MeasureTime("Master Last Measure");
 
+
+   // print all measured timings
    double total_time = 0.0;
 
    cout << "Master Timings" << endl;
@@ -442,33 +489,19 @@ void Master::Solve(double time_limit)
       cout << description << ": " << measured_time << "s" << endl;
       total_time += measured_time;
    }
-   // write measure out
+
+   // get scips total solving time
    auto total_solving_time = SCIPgetSolvingTime(scipRMP_);
 
+   // print measured times
    cout << "=== TOTAL TIME IN LP SOLVING === " << std::fixed << total_time << endl;
    cout << "=== TOTAL TIME IN B&P === " << std::fixed << total_solving_time << endl;
 }
 
 /**
- * @brief Display the solution of the master problem
- *
- * @note The code defines a member function called "displaySolution" of a class called "Master". This function utilizes
- * the SCIP optimization solver to print the best solution found by the solver. The SCIPprintBestSol function takes
- * three arguments: a pointer to a SCIP instance (in this case, scipRMP_), a pointer to a file stream for output (in
- * this case, NULL), and a Boolean value indicating whether to display the solution in verbose mode (in this case,
- * FALSE). The function does not return any value.
- */
-
-/**
- * @brief Set the SCIP parameters
- *
- * @note This code defines a method named setSCIPParameters in the class Master. The method sets various parameters for
- * the SCIP optimization solver. These parameters include limits for time and gap, verbosity level, and display options.
- * Additionally, a file for the vbc-tool is specified so that the branch and bound tree can be visualized.
- * Some parameters are modified specifically for the pricing process. For column generation, the maxrestarts parameter
- * is set to 0 to avoid a known bug. For constraints containing priced variables, the rootredcost parameter is disabled,
- * while constraints that may not be respected during the pricing process are not added.
- * Finally, constraints are not separated to avoid adding ones that may be violated during the pricing process.
+ * @brief Set SCIP of the SCIP object. This includes default time limit, default
+ * gap, verb level and lp info. This also enables visualization of B&P tree in
+ * VBC format. Furthermore, separation is disabled
  */
 void Master::SetSCIPParameters()
 {
@@ -499,8 +532,23 @@ void Master::SetSCIPParameters()
    // no separation to avoid that constraints are added which we cannot respect during the pricing process
    SCIPsetSeparating(scipRMP_, SCIP_PARAMSETTING_OFF, TRUE);
 }
+
+/**
+ * @brief Given an optimal SCIP solution, finds the successor coil of coil i on
+ * line k
+ *
+ * @param solution SCIP solution on which the successor coil should be searched
+ * for
+ * @param coil_i 
+ * @param line 
+ * @return tuple<bool, Coil, Mode, Mode> First entry of tuple specifies if
+ * sucessor coil was found. If yes, the second entry specifies successor coil j
+ * of coil i. The third entry then specifies the mode of coil i. The fourth
+ * entry specifies the mode of successor coil j.
+ */
 tuple<bool, Coil, Mode, Mode> Master::FindSucessorCoil(SCIP_Sol *solution, Coil coil_i, ProductionLine line)
 {
+   // check every possible X_ijkmn for given i and k (line)
    for (auto &mode_i : instance_->modes[make_tuple(coil_i, line)])
    {
       for (auto &coil_j : instance_->coils)
@@ -513,8 +561,10 @@ tuple<bool, Coil, Mode, Mode> Master::FindSucessorCoil(SCIP_Sol *solution, Coil 
                continue;
 
             auto &var = vars_X_[var_tuple];
-            auto var_value = SCIPgetSolVal(scipRMP_, solution, var);
 
+            // get variable value
+            auto var_value = SCIPgetSolVal(scipRMP_, solution, var);
+            // if variable value is sufficiently large, here at least 1/2, variable value of binry variable is interpreted as true
             if (var_value > 0.5)
             { // TODO: use SCIP epsilon methods
                return make_tuple(true, coil_j, mode_i, mode_j);
@@ -526,6 +576,13 @@ tuple<bool, Coil, Mode, Mode> Master::FindSucessorCoil(SCIP_Sol *solution, Coil 
    return make_tuple(false, 0, 0, 0);
 }
 
+/**
+ * @brief Displays the yet best found solution and statistics of solving
+ * process. If reconstruction of production schedules is enabled, the method
+ * FindSucessorCoil(..) is iteratively used to reconstruct production schedule
+ * for every production line
+ *
+ */
 void Master::DisplaySolution()
 {
    cout << "=== STATS ===" << endl;
@@ -589,6 +646,12 @@ void Master::DisplaySolution()
    }
 };
 
+/**
+ * @brief Stop the SCIP clock and write a log entry of measured time
+ * 
+ * @param description The description of the log entry
+ * @return SCIP_Real The measured time
+ */
 SCIP_Real Master::MeasureTime(string description)
 {
    SCIPstopClock(scipRMP_, master_round_clock);
@@ -598,6 +661,10 @@ SCIP_Real Master::MeasureTime(string description)
 
    return measured_time;
 }
+/**
+ * @brief Restart the SCIP clock
+ * 
+ */
 void Master::RestartTimer()
 {
    SCIPresetClock(scipRMP_, master_round_clock);
