@@ -154,7 +154,7 @@ SCIP_RETCODE MyPricer::scip_init(SCIP *scip, SCIP_PRICER *pricer)
 }
 SCIP_RESULT MyPricer::SolveSubProblem(ProductionLine line, SubProblem &subproblem, bool is_farkas, vector<shared_ptr<ProductionLineSchedule>> solutions, condition_variable &search_terminated)
 {
-  if (Settings::kInitialSolveEnabled)
+  if (Settings::kInitialSolveEnabled || is_farkas)
   {
     // try time limited initial solve
     subproblem.dynamic_gap_ = Settings::kInitialSolveGap;
@@ -229,6 +229,9 @@ SCIP_RESULT MyPricer::SolveSubProblem(ProductionLine line, SubProblem &subproble
     }
   }
 
+  if(is_farkas) {
+    return SCIP_DIDNOTFIND;
+  }
   // run heuristic
   // run until terminate is true
   // if a new column was found

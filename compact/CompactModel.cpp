@@ -2,7 +2,11 @@
 #include "../Settings.h"
 #include <scip/scip_general.h>
 #include <scip/scip_prob.h>
+/**
+    Creates and adds a Z variable for the specified coil.
 
+    @param coil_i The Coil object for which to create the Z variable.
+    */
 void CompactModel::CreateZVariable(Coil coil_i)
 {
    assert(vars_Z_.count(coil_i) == 0);
@@ -25,6 +29,11 @@ void CompactModel::CreateZVariable(Coil coil_i)
    SCIPaddVar(scip_, *z_var_pointer);
 }
 
+/**
+    Creates and adds a S variable for the specified coil.
+
+    @param coil_i The Coil object for which to create the S variable.
+    */
 void CompactModel::CreateSVariable(Coil coil_i)
 {
    assert(vars_S_.count(coil_i) == 0);
@@ -49,6 +58,7 @@ void CompactModel::CreateSVariable(Coil coil_i)
 
    SCIPaddVar(scip_, *s_var_pointer);
 }
+
 void CompactModel::CreateXVariable(Coil coil_i, Coil coil_j, ProductionLine line, Mode mode_i, Mode mode_j)
 {
    // bounds of variable: if coil_i = coil_j, variable should be equal to 0, else binary, i.e. 0 <= var <= 0
@@ -76,10 +86,10 @@ void CompactModel::CreateXVariable(Coil coil_i, Coil coil_j, ProductionLine line
 /**
  * @brief Construct a new Compact Model:: Compact Model object
  *
- * @param ins pointer to problem-instance
+ * @param instance pointer to problem-instance
  *
  * @note This code is a constructor for the CompactModel class. It creates a SCIP environment and sets the specific
- * parameters. It then creates and adds all variables to the model, including binary variables X_ij and Y_i for items i,
+ * parameters. It then creates and adds all variables to the model, including binary variables X_ijkmn, Z_i and Z_i for items i,
  * bins j. Finally, it adds all restrictions to the model and writes the final LP-model into a file.
  */
 CompactModel::CompactModel(shared_ptr<Instance> instance) : instance_(instance)
