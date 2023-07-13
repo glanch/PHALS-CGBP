@@ -76,7 +76,7 @@ private:
    int redcost_iteration_ = 0;
    int farkas_iteration_ = 0;
 
-   SCIP_RESULT SolveSubProblem(ProductionLine line, SubProblem& subproblem, bool is_farkas, vector<shared_ptr<ProductionLineSchedule>> solutions, condition_variable& search_terminated);
+   SCIP_RESULT SolveSubProblem(ProductionLine line, SubProblem& subproblem, bool is_farkas, vector<shared_ptr<ProductionLineSchedule>> solutions, condition_variable& search_terminated, bool& termination_flag);
 
    bool CheckSolutionAlreadyPresent(ProductionLine& line, shared_ptr<ProductionLineSchedule>& solution);
 

@@ -38,7 +38,7 @@ int main(int argc, char *argv[])
                          true);
 
     // activate pricer
-    SCIPactivatePrice(master_problem->scipRMP_, SCIPfindPricer(master_problem->scipRMP_, pricer->pricer_name_));
+    SCIPactivatePricer(master_problem->scipRMP_, SCIPfindPricer(master_problem->scipRMP_, pricer->pricer_name_));
 
     // if a parameter is passed, this is used as time limit in seconds, else default_instance is used
     auto time_limit = argc >= 3 ? stod(argv[2]) : Settings::kDefaultMasterTimeLimit;

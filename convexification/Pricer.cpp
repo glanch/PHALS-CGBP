@@ -61,7 +61,13 @@ void MyPricer::PrintMasterBoundsAndMeasure(bool is_farkas)
        << "\t current farkas: \t" << farkas_iteration_ << "" << endl
        << "\t current redcost:\t" << redcost_iteration_ << "" << endl
        << endl
-       << "Current Bounds" << endl
+       << "Amount of solutions" << endl;
+  for (auto &line : instance_->productionLines)
+  {
+    cout << "Line " << line << ": " << master_problem_->schedules_[line].size() << endl;
+  }
+
+  cout << "Current Bounds" << endl
        << "Primal (objective current incumbent): \t" << primal_bound << endl
        << "Dual (best global dual bound):        \t" << dual_bound << endl
        << "Avg Dual (Avg best global dual bound):\t" << avg_dual_bound << endl
@@ -152,34 +158,34 @@ SCIP_RETCODE MyPricer::scip_init(SCIP *scip, SCIP_PRICER *pricer)
 
   return SCIP_OKAY;
 }
-SCIP_RESULT MyPricer::SolveSubProblem(ProductionLine line, SubProblem &subproblem, bool is_farkas, vector<shared_ptr<ProductionLineSchedule>> solutions, condition_variable &search_terminated)
+
+SCIP_RESULT MyPricer::SolveSubProblem(ProductionLine line, SubProblem &subproblem, bool is_farkas, vector<shared_ptr<ProductionLineSchedule>> solutions, condition_variable &search_terminated, bool &termination_flag)
 {
-  if (Settings::kInitialSolveEnabled || is_farkas)
+  // if farkas pricing needs to be done, then solve exact
+  if (is_farkas)
   {
-    // try time limited initial solve
-    subproblem.dynamic_gap_ = Settings::kInitialSolveGap;
-    subproblem.SetTimeLimit(Settings::kInitialSolveTimeTimeLimitInSeconds);
+    subproblem.dynamic_gap_ = Settings::kFarkasSolveGap;
+    subproblem.SetTimeLimit(Settings::kFarkasSolveTimeTimeLimitInSeconds);
     subproblem.UpdateObjective(dual_values_, is_farkas);
 
     {
       // acquire lock to protect cout
       std::lock_guard<std::mutex> guard(master_problem_->mutex_);
-      cout << "[Subproblem L" << line << "]: Initial Solving. Trying to solve subproblem with gap " << Settings::kInitialSolveGap << " and time limit " << Settings::kInitialSolveTimeTimeLimitInSeconds << endl;
+      cout << "[Subproblem L" << line << "]: Farkas Solving. Trying to solve subproblem with gap " << Settings::kFarkasSolveGap << " and time limit " << Settings::kFarkasSolveTimeTimeLimitInSeconds << endl;
     }
 
     auto subproblem_solutions = subproblem.Solve();
     {
       // acquire lock to protect cout
       std::lock_guard<std::mutex> guard(master_problem_->mutex_);
-      cout << "[Subproblem L" << line << "]: Initial Solving. Subproblem solved with " << subproblem_solutions.size() << " feasible solutions" << endl;
+      cout << "[Subproblem L" << line << "]: Farkas Solving. Subproblem solved with " << subproblem_solutions.size() << " feasible solutions" << endl;
     }
 
-    bool initial_solving_column_found = false;
+    auto column_found = false;
     // iterate over all solutions
     for (auto &subproblem_solution : subproblem_solutions)
     {
-      // add variable if it could happen that selecting it improves the objective
-
+      // add variable if it could happen that it destroys infeasibility
       if (subproblem_solution->reduced_cost_negative)
       {
         // acquire lock to protect master problem, see RAII
@@ -191,7 +197,7 @@ SCIP_RESULT MyPricer::SolveSubProblem(ProductionLine line, SubProblem &subproble
         if (!schedule_contained)
         {
           // add schedule and corresponding variable if it wasn't generated previously
-          cout << "[Subproblem L" << line << "]: Initial Solving. One unique column found and added" << endl;
+          cout << "[Subproblem L" << line << "]: Farkas Solving. One unique column found and added" << endl;
 
           DisplaySchedule(subproblem_solution);
           AddNewVar(subproblem_solution);
@@ -199,39 +205,25 @@ SCIP_RESULT MyPricer::SolveSubProblem(ProductionLine line, SubProblem &subproble
           // add to output vector
           solutions.push_back(subproblem_solution);
 
-          initial_solving_column_found = true;
+          column_found = true;
         }
         else
         {
-          cout << "[Subproblem L" << line << "]: Initial Solving. One solution column with rc=" << subproblem_solution->reduced_cost << " already present" << endl;
+          cout << "[Subproblem L" << line << "]: Farkas Solving. One solution column with rc=" << subproblem_solution->reduced_cost << " already present" << endl;
         }
       }
     }
 
-    if (initial_solving_column_found)
+    if (column_found)
     {
-      search_terminated.notify_all();
       return SCIP_SUCCESS;
     }
-
-    if (Settings::kOnlyInitialSolve)
+    else
     {
-      return SCIP_DIDNOTFIND;
-    }
-
-    // if the solution process was interrupted, stop here
-    if (subproblem.WasInterrupted() && Settings::kEnableSubproblemInterruption)
-    {
-      std::lock_guard<std::mutex> guard(master_problem_->mutex_);
-      cout << "[Subproblem L" << line << "]: Initial Solving. Further solution process was interrupted. Stopping here." << endl;
-
       return SCIP_DIDNOTFIND;
     }
   }
 
-  if(is_farkas) {
-    return SCIP_DIDNOTFIND;
-  }
   // run heuristic
   // run until terminate is true
   // if a new column was found
@@ -241,6 +233,7 @@ SCIP_RESULT MyPricer::SolveSubProblem(ProductionLine line, SubProblem &subproble
   subproblem.ResetTimeLimit();
   subproblem.SetTimeLimit(Settings::kDynamicGapTimeLimitInSeconds);
   subproblem.ResetDynamicGap();
+
   bool terminate = false;
   bool not_interrupted = true;
   bool column_found = false;
@@ -257,11 +250,20 @@ SCIP_RESULT MyPricer::SolveSubProblem(ProductionLine line, SubProblem &subproble
 
     subproblem.UpdateObjective(dual_values_, is_farkas);
     auto subproblem_solutions = subproblem.Solve();
+    auto dual_bound = subproblem.GetDualBound();
 
     {
       // acquire lock to protect cout
       std::lock_guard<std::mutex> guard(master_problem_->mutex_);
       cout << "[Subproblem L" << line << "]: Subproblem solved with " << subproblem_solutions.size() << " feasible solutions" << endl;
+      cout << "[Subproblem L" << line << "]: Dual Bound of subproblem: " << dual_bound << endl;
+
+      if (!subproblem.IsDualBoundNegative())
+      {
+        cout << "[Subproblem L" << line << "]: Dual Bound of subproblem is not negative. Terminating." << endl;
+
+        return SCIP_DIDNOTFIND;
+      }
     }
 
     bool unique_column_with_negative_reduced_cost_found = false;
@@ -331,7 +333,7 @@ SCIP_RESULT MyPricer::SolveSubProblem(ProductionLine line, SubProblem &subproble
       }
     }
 
-    if (subproblem.WasInterrupted() && Settings::kEnableSubproblemInterruption)
+    if ((subproblem.WasInterrupted() || termination_flag) && Settings::kEnableSubproblemInterruption)
     {
       // if it was interrupted, cancel here
       not_interrupted = false;
@@ -350,13 +352,82 @@ SCIP_RESULT MyPricer::SolveSubProblem(ProductionLine line, SubProblem &subproble
 
   if (column_found)
   {
+    // terminate other
+    termination_flag = true;
     search_terminated.notify_all();
     return SCIP_SUCCESS;
   }
-  else
+
+  if (termination_flag)
   {
     return SCIP_DIDNOTFIND;
   }
+
+  subproblem.dynamic_gap_ = Settings::kInitialSolveGap;
+  subproblem.SetTimeLimit(Settings::kInitialSolveTimeTimeLimitInSeconds);
+  subproblem.UpdateObjective(dual_values_, is_farkas);
+
+  {
+    // acquire lock to protect cout
+    std::lock_guard<std::mutex> guard(master_problem_->mutex_);
+    cout << "[Subproblem L" << line << "]: Exact Solving. Trying to solve subproblem with gap " << Settings::kInitialSolveGap << " and time limit " << Settings::kInitialSolveTimeTimeLimitInSeconds << endl;
+  }
+
+  auto subproblem_solutions = subproblem.Solve();
+  {
+    // acquire lock to protect cout
+    std::lock_guard<std::mutex> guard(master_problem_->mutex_);
+    cout << "[Subproblem L" << line << "]: Exact Solving. Subproblem solved with " << subproblem_solutions.size() << " feasible solutions" << endl;
+  }
+
+  column_found = false;
+  // iterate over all solutions
+  for (auto &subproblem_solution : subproblem_solutions)
+  {
+    // add variable if it could happen that selecting it improves the objective
+    if (subproblem_solution->reduced_cost_negative)
+    {
+      // acquire lock to protect master problem, see RAII
+      std::lock_guard<std::mutex> guard(master_problem_->mutex_);
+
+      // check if solution is already contained in our generated schedules
+      bool schedule_contained = CheckSolutionAlreadyPresent(line, subproblem_solution);
+
+      if (!schedule_contained)
+      {
+        // add schedule and corresponding variable if it wasn't generated previously
+        cout << "[Subproblem L" << line << "]: Exact Solving. One unique column found and added" << endl;
+
+        DisplaySchedule(subproblem_solution);
+        AddNewVar(subproblem_solution);
+
+        // add to output vector
+        solutions.push_back(subproblem_solution);
+
+        column_found = true;
+      }
+      else
+      {
+        cout << "[Subproblem L" << line << "]: Exact Solving. One solution column with rc=" << subproblem_solution->reduced_cost << " already present" << endl;
+      }
+    }
+  }
+
+  if (column_found)
+  {
+    termination_flag = true;
+    search_terminated.notify_all();
+    return SCIP_SUCCESS;
+  }
+
+  // if the solution process was interrupted, stop here
+  if (subproblem.WasInterrupted() && Settings::kEnableSubproblemInterruption)
+  {
+    std::lock_guard<std::mutex> guard(master_problem_->mutex_);
+    cout << "[Subproblem L" << line << "]: Exact Solving. Further solution process was interrupted. Stopping here." << endl;
+  }
+
+  return SCIP_DIDNOTFIND;
 }
 /**
  * @brief perform pricing for dual and farkas combined with Flag isFarkas
@@ -418,10 +489,13 @@ SCIP_RESULT MyPricer::Pricing(const bool is_farkas)
   std::mutex termination_mutex;
   std::condition_variable search_terminated;
 
+  // flag needed to avoid lost wakeup or lost update
+  bool termination_flag = false;
+
   for (auto &[line, subproblem] : subproblems_)
   {
     subproblem_threads[line] = thread([&]
-                                      { SolveSubProblem(line, subproblem, is_farkas, subproblem_solutions[line], search_terminated); });
+                                      { SolveSubProblem(line, subproblem, is_farkas, subproblem_solutions[line], search_terminated, termination_flag); });
   }
 
   if (Settings::kEnableSubproblemInterruption)
@@ -434,18 +508,23 @@ SCIP_RESULT MyPricer::Pricing(const bool is_farkas)
                                 {
                                   thread.join();
                                 }
-
-                                search_terminated.notify_all();
-                              });
+                                termination_flag = true;
+                                search_terminated.notify_all(); });
 
     // wait for some subproblem to return with found columns
     std::unique_lock<std::mutex> termination_lock{termination_mutex};
-    search_terminated.wait(termination_lock);
+    search_terminated.wait(termination_lock, [&termination_flag]
+                           {
+                             cout << termination_flag << endl;
+                             return termination_flag; });
 
-    // now request all (other) subproblems to be cancelled
-    for (auto &[line, subproblem] : subproblems_)
+    // if this is not farkas pricing, now request all (other) subproblems to be cancelled
+    if (!is_farkas)
     {
-      subproblem.InterruptSolving();
+      for (auto &[line, subproblem] : subproblems_)
+      {
+        subproblem.InterruptSolving();
+      }
     }
 
     // implicitly wait for all other threads to finish
@@ -612,56 +691,12 @@ SCIP_RETCODE MyPricer::scip_farkas(SCIP *scip, SCIP_PRICER *pricer, SCIP_RESULT 
   }
   else
   {
-    // check if heuristic enabled
-    if (!master_problem_->initial_column_heuristic_tried_ && master_problem_->initial_column_heuristic_enabled_)
-    {
-      // try to find initial column that has as many columns as possible
-      for (auto &[line, subproblem] : this->subproblems_initial_columns_)
-      {
-        subproblem.UpdateObjective(dual_values_, true);
-
-        auto subproblem_solution = subproblem.Solve();
-
-        // add variable if it could happen that selecting it improves the objective
-        if (subproblem_solution->reduced_cost_negative)
-        {
-          // check if solution is already contained in our generated schedules
-          bool schedule_contained = false;
-          for (auto &schedule : master_problem_->schedules_[line])
-          {
-            if (map_compare(schedule->edges, subproblem_solution->edges))
-            {
-              schedule_contained = true;
-              break;
-            }
-          }
-          assert(!schedule_contained);
-
-          cout << "Initial feasible column found with heuristic for line " << subproblem.line_ << endl;
-
-          // add schedule and corresponding variable if it wasn't generated previously
-          DisplaySchedule(subproblem_solution);
-          AddNewVar(subproblem_solution);
-
-          // break;
-        }
-        else
-        {
-          cout << "Heuristic for line " << subproblem.line_ << " failed." << endl;
-        }
-      }
-
-      master_problem_->initial_column_heuristic_tried_ = true;
-    }
-    else
-    {
-      cout << "Farkas-Pricing: " << endl;
-      // start dual-pricing with isFarkas-Flag = false
-      *result = Pricing(true);
-    }
-
-    cout << endl;
+    cout << "Farkas-Pricing: " << endl;
+    // start farkas pricing
+    *result = Pricing(true);
   }
+
+  cout << endl;
 
   // stop measure pricing round
   StopMeasurePricingRound(true);

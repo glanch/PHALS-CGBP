@@ -24,12 +24,15 @@ public:
     
     void InterruptSolving();
 
+    SCIP_Real GetDualBound();
+    bool IsDualBoundNegative();
+
     double dynamic_gap_ = Settings::kDynamicGap;
     
     ProductionLine line_;
+    SCIP *scipSP_;
 private:
     shared_ptr<Instance> instance_;
-    SCIP *scipSP_;
 
     // variables
     // dummy variable

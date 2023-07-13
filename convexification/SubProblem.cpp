@@ -9,12 +9,14 @@ void SubProblem::SetGap(double gap)
   SCIPsetRealParam(scipSP_, "limits/gap", gap_); // default 0
 }
 
-void SubProblem::SetTimeLimit(double time_limit) {
+void SubProblem::SetTimeLimit(double time_limit)
+{
   SCIPsetRealParam(scipSP_, "limits/time", time_limit); // default 0
 }
 
-void SubProblem::ResetTimeLimit() {
-  SCIPsetRealParam(scipSP_, "limits/time", 1e+20);    // default 1e+20 s
+void SubProblem::ResetTimeLimit()
+{
+  SCIPsetRealParam(scipSP_, "limits/time", 1e+20); // default 1e+20 s
 }
 void SubProblem::ResetDynamicGap()
 {
@@ -90,10 +92,12 @@ void SubProblem::CreateXVariable(Coil coil_i, Coil coil_j, ProductionLine line, 
   SCIPaddVar(scipSP_, *x_var_pointer);
 }
 
-bool SubProblem::WasInterrupted() {
+bool SubProblem::WasInterrupted()
+{
   return SCIPisSolveInterrupted(scipSP_);
 }
-void SubProblem::InterruptSolving() {
+void SubProblem::InterruptSolving()
+{
   SCIPinterruptSolve(scipSP_);
 }
 
@@ -118,6 +122,9 @@ void SubProblem::Setup(shared_ptr<Instance> instance, ProductionLine line)
   SCIPsetBoolParam(scipSP_, "constraints/countsols/collect", TRUE);
   // we do not care about solutions, if these have a not negative optimal objfunc-value
   SCIPsetObjlimit(scipSP_, -SCIPepsilon(scipSP_));
+
+  // enable reoptimization if wanted
+  SCIPenableReoptimization(scipSP_, Settings::kEnableReoptimization);
 
   // create Helping-dummy for the name of variables and constraints
   char var_cons_name[Settings::kSCIPMaxStringLength];
@@ -475,14 +482,42 @@ SubProblem::~SubProblem()
 // update the objective-function of the Subproblem according to the new DualVariables with SCIPchgVarObj()
 void SubProblem::UpdateObjective(shared_ptr<DualValues> dual_values, const bool is_farkas)
 {
-  SCIPfreeTransform(scipSP_); // enable modifications
+  // if reoptimization is enabled, methods for freeing transformed problem and updating objective function are different
+
+  // enable modifications
+  if(Settings::kEnableReoptimization) {
+    SCIPfreeReoptSolve(scipSP_); 
+  } else {
+
+  SCIPfreeTransform(scipSP_);
+  }
+
+  // collect all variables
+  // estimate number of variables in objective
+  auto nvars = instance_->coils.size() + vars_X_.size() + 1;
+
+  // since SCIP needs contiguous memory of coefficients and variables for reoptimization objective function change,
+  // collect coefficients in objective function
+  vector<SCIP_Real> coeffs;
+
+  // and1 collect variable pointers
+  vector<SCIP_Var *> vars;
+
+  // avoid unnecessary reallocations / resizings of vector by predefining size
+  vars.resize(nvars);
+  coeffs.resize(nvars);
+
+  // current index of both "arrays"
+  int i = 0;
 
   // Z variables
   for (auto coil_i : instance_->coils)
   {
     // both delay coils constraint and original variable constraint duals need to be respected here
     // but only if coil_i is a regular coil, if not, don't consider dual of max delay constraint
-    SCIPchgVarObj(scipSP_, vars_Z_[coil_i], -(instance_->IsRegularCoil(coil_i) ? dual_values->pi_max_delayed_coils_ : 0) + dual_values->pi_original_var_Z[coil_i]);
+    vars[i] = vars_Z_[coil_i];
+    coeffs[i] = -(instance_->IsRegularCoil(coil_i) ? dual_values->pi_max_delayed_coils_ : 0) + dual_values->pi_original_var_Z[coil_i];
+    i++;
   }
 
   // S variables don't occur in the MP, so no coefficients in reduced cost term
@@ -492,6 +527,7 @@ void SubProblem::UpdateObjective(shared_ptr<DualValues> dual_values, const bool 
   {
     // destructure
     auto &[coil_i, coil_j, line, mode_i, mode_j] = tuple;
+
     // this should always be the case, else, we have a problem
     assert(line == line_);
 
@@ -520,11 +556,29 @@ void SubProblem::UpdateObjective(shared_ptr<DualValues> dual_values, const bool 
       if (is_farkas)
         column_cost = 0;
     }
-    SCIPchgVarObj(scipSP_, var_X, column_cost - dual_cost - original_var_cost);
+
+    vars[i] = var_X;
+    coeffs[i] = column_cost - dual_cost - original_var_cost;
+    i++;
   }
 
   // convexity constraint for this line
-  SCIPchgVarObj(scipSP_, var_constant_one_, -dual_values->pi_convexity_[line_]);
+  vars[i] = var_constant_one_;
+  coeffs[i] = -dual_values->pi_convexity_[line_];
+  i++;
+
+  // this needs to hold because else our previous estimation of number of variables was wrong
+  assert(i == nvars);
+
+  if(Settings::kEnableReoptimization) {
+    // since vectors are required to be contiguous memory, we can assume that pointer to first element is equivalent to C style array
+    SCIPchgReoptObjective(scipSP_, SCIP_Objsense::SCIP_OBJSENSE_MINIMIZE, &vars[0], &coeffs[0], nvars);
+  } else {
+    // set coefficient for each variable
+    for(int array_index = 0; array_index < nvars; array_index++) {
+      SCIPchgVarObj(scipSP_, vars[array_index], coeffs[array_index]);
+    }
+  }
 }
 
 vector<shared_ptr<ProductionLineSchedule>> SubProblem::Solve()
@@ -546,16 +600,15 @@ vector<shared_ptr<ProductionLineSchedule>> SubProblem::Solve()
   auto number_of_solutions = SCIPgetNSols(scipSP_);
 
   // return if no solutions found
-  if(number_of_solutions == 0 || best_solution == NULL) 
+  if (number_of_solutions == 0 || best_solution == NULL)
     return schedules;
-
 
   auto solutions = SCIPgetSols(scipSP_);
   // loop through every solution
   // explicitly include best solution by initializing solution_index to -1
   for (int solution_index = 0; solution_index < number_of_solutions; solution_index++)
   {
-    
+
     // get solution from scip
     // if solution_index == -1, i.e. first iteration, take best solution
     auto scip_solution = solution_index == -1 ? best_solution : solutions[solution_index];
@@ -566,7 +619,6 @@ vector<shared_ptr<ProductionLineSchedule>> SubProblem::Solve()
 
     // set line
     schedule->line = line_;
-
 
     // check if solution is null, i.e. no column was found
     if (scip_solution == NULL)
@@ -625,4 +677,14 @@ vector<shared_ptr<ProductionLineSchedule>> SubProblem::Solve()
   iteration_++;
 
   return schedules;
+}
+
+SCIP_Real SubProblem::GetDualBound()
+{
+  return SCIPgetDualbound(scipSP_);
+}
+
+bool SubProblem::IsDualBoundNegative()
+{
+  return SCIPisNegative(scipSP_, GetDualBound());
 }
