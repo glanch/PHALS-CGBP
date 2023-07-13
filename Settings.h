@@ -6,7 +6,7 @@ namespace Settings
     constexpr double kBigM = 1000;
 
     
-    constexpr bool kGenerateInitialTrivialColumn = true;
+    constexpr bool kGenerateInitialTrivialColumn = false;
 
     constexpr double kDynamicGapMaxRounds = 20;
     constexpr double kDynamicGap = 50;
@@ -17,9 +17,6 @@ namespace Settings
     constexpr double kInitialSolveTimeTimeLimitInSeconds = 1e+20;
     constexpr bool kInitialSolveEnabled = false;
     constexpr bool kOnlyInitialSolve = false;
-
-    constexpr double kFarkasSolveGap = 0;
-    constexpr double kFarkasSolveTimeTimeLimitInSeconds = 1e+20;
     
     constexpr bool kEnableSubproblemInterruption = true;
 

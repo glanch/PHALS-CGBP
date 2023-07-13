@@ -161,69 +161,6 @@ SCIP_RETCODE MyPricer::scip_init(SCIP *scip, SCIP_PRICER *pricer)
 
 SCIP_RESULT MyPricer::SolveSubProblem(ProductionLine line, SubProblem &subproblem, bool is_farkas, vector<shared_ptr<ProductionLineSchedule>> solutions, condition_variable &search_terminated, bool &termination_flag)
 {
-  // if farkas pricing needs to be done, then solve exact
-  if (is_farkas)
-  {
-    subproblem.dynamic_gap_ = Settings::kFarkasSolveGap;
-    subproblem.SetTimeLimit(Settings::kFarkasSolveTimeTimeLimitInSeconds);
-    subproblem.UpdateObjective(dual_values_, is_farkas);
-
-    {
-      // acquire lock to protect cout
-      std::lock_guard<std::mutex> guard(master_problem_->mutex_);
-      cout << "[Subproblem L" << line << "]: Farkas Solving. Trying to solve subproblem with gap " << Settings::kFarkasSolveGap << " and time limit " << Settings::kFarkasSolveTimeTimeLimitInSeconds << endl;
-    }
-
-    auto subproblem_solutions = subproblem.Solve();
-    {
-      // acquire lock to protect cout
-      std::lock_guard<std::mutex> guard(master_problem_->mutex_);
-      cout << "[Subproblem L" << line << "]: Farkas Solving. Subproblem solved with " << subproblem_solutions.size() << " feasible solutions" << endl;
-    }
-
-    auto column_found = false;
-    // iterate over all solutions
-    for (auto &subproblem_solution : subproblem_solutions)
-    {
-      // add variable if it could happen that it destroys infeasibility
-      if (subproblem_solution->reduced_cost_negative)
-      {
-        // acquire lock to protect master problem, see RAII
-        std::lock_guard<std::mutex> guard(master_problem_->mutex_);
-
-        // check if solution is already contained in our generated schedules
-        bool schedule_contained = CheckSolutionAlreadyPresent(line, subproblem_solution);
-
-        if (!schedule_contained)
-        {
-          // add schedule and corresponding variable if it wasn't generated previously
-          cout << "[Subproblem L" << line << "]: Farkas Solving. One unique column found and added" << endl;
-
-          DisplaySchedule(subproblem_solution);
-          AddNewVar(subproblem_solution);
-
-          // add to output vector
-          solutions.push_back(subproblem_solution);
-
-          column_found = true;
-        }
-        else
-        {
-          cout << "[Subproblem L" << line << "]: Farkas Solving. One solution column with rc=" << subproblem_solution->reduced_cost << " already present" << endl;
-        }
-      }
-    }
-
-    if (column_found)
-    {
-      return SCIP_SUCCESS;
-    }
-    else
-    {
-      return SCIP_DIDNOTFIND;
-    }
-  }
-
   // run heuristic
   // run until terminate is true
   // if a new column was found
