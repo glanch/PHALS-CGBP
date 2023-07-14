@@ -161,6 +161,74 @@ SCIP_RETCODE MyPricer::scip_init(SCIP *scip, SCIP_PRICER *pricer)
 
 SCIP_RESULT MyPricer::SolveSubProblem(ProductionLine line, SubProblem &subproblem, bool is_farkas, vector<shared_ptr<ProductionLineSchedule>> solutions, condition_variable &search_terminated, bool &termination_flag)
 {
+  // run exact pricing if needed
+  if (Settings::kInitialSolveEnabled)
+  {
+    // try time limited initial solve
+    subproblem.dynamic_gap_ = Settings::kInitialSolveGap;
+    subproblem.SetTimeLimit(Settings::kInitialSolveTimeTimeLimitInSeconds);
+    subproblem.UpdateObjective(dual_values_, is_farkas);
+
+    {
+      // acquire lock to protect cout
+      std::lock_guard<std::mutex> guard(master_problem_->mutex_);
+      cout << "[Subproblem L" << line << "]: Initial Solving. Trying to solve subproblem with gap " << Settings::kInitialSolveGap << " and time limit " << Settings::kInitialSolveTimeTimeLimitInSeconds << endl;
+    }
+
+    auto subproblem_solutions = subproblem.Solve();
+    {
+      // acquire lock to protect cout
+      std::lock_guard<std::mutex> guard(master_problem_->mutex_);
+      cout << "[Subproblem L" << line << "]: Initial Solving. Subproblem solved with " << subproblem_solutions.size() << " feasible solutions" << endl;
+    }
+
+    bool initial_solving_column_found = false;
+    // iterate over all solutions
+    for (auto &subproblem_solution : subproblem_solutions)
+    {
+      // add variable if it could happen that selecting it improves the objective
+
+      if (subproblem_solution->reduced_cost_negative)
+      {
+        // acquire lock to protect master problem, see RAII
+        std::lock_guard<std::mutex> guard(master_problem_->mutex_);
+
+        // check if solution is already contained in our generated schedules
+        bool schedule_contained = CheckSolutionAlreadyPresent(line, subproblem_solution);
+
+        if (!schedule_contained)
+        {
+          // add schedule and corresponding variable if it wasn't generated previously
+          cout << "[Subproblem L" << line << "]: Initial Solving. One unique column found and added" << endl;
+
+          DisplaySchedule(subproblem_solution);
+          AddNewVar(subproblem_solution);
+
+          // add to output vector
+          solutions.push_back(subproblem_solution);
+
+          initial_solving_column_found = true;
+        }
+        else
+        {
+          cout << "[Subproblem L" << line << "]: Initial Solving. One solution column with rc=" << subproblem_solution->reduced_cost << " already present" << endl;
+        }
+      }
+    }
+
+    if (initial_solving_column_found)
+    {
+      // terminate other
+      termination_flag = true;
+      search_terminated.notify_all();
+      return SCIP_SUCCESS;
+    }
+
+    if (Settings::kOnlyInitialSolve)
+    {
+      return SCIP_DIDNOTFIND;
+    }
+  }
   // run heuristic
   // run until terminate is true
   // if a new column was found
@@ -446,14 +514,13 @@ SCIP_RESULT MyPricer::Pricing(const bool is_farkas)
                                   thread.join();
                                 }
                                 termination_flag = true;
-                                search_terminated.notify_all(); });
+                                search_terminated.notify_all();
+                              });
 
     // wait for some subproblem to return with found columns
     std::unique_lock<std::mutex> termination_lock{termination_mutex};
     search_terminated.wait(termination_lock, [&termination_flag]
-                           {
-                             cout << termination_flag << endl;
-                             return termination_flag; });
+                           { return termination_flag; });
 
     // if this is not farkas pricing, now request all (other) subproblems to be cancelled
     if (!is_farkas)
