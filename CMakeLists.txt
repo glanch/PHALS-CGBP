@@ -14,7 +14,6 @@ add_executable(PHALS
     convexification/Master.cpp
     convexification/Pricer.cpp
     convexification/SubProblem.cpp
-    convexification/SubProblemInitialColumns.cpp
     Instance.cpp
 )
 

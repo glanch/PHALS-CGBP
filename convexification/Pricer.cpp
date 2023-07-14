@@ -1,7 +1,6 @@
 #include <memory>
 #include <tuple>
 #include "Pricer.h"
-#include "SubProblemInitialColumns.h"
 #include "SubProblem.h"
 #include "scip/scip.h"
 #include <thread>
@@ -45,7 +44,6 @@ MyPricer::MyPricer(shared_ptr<Master> master_problem, const char *pricer_name, c
   for (auto &line : instance_->productionLines)
   {
     this->subproblems_[line].Setup(instance_, line);
-    this->subproblems_initial_columns_[line].Setup(instance_, line);
   }
 }
 void MyPricer::PrintMasterBoundsAndMeasure(bool is_farkas)

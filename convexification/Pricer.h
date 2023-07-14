@@ -14,7 +14,6 @@
 #include "Master.h"
 
 #include "SubProblem.h"
-#include "SubProblemInitialColumns.h"
 
 #include "ProductionLineSchedule.h"
 
@@ -35,7 +34,6 @@ public:
    SCIP *scipRMP_;                     // pointer to the scip-env of the master-problem
 
    map<ProductionLine, SubProblem> subproblems_;
-   map<ProductionLine, SubProblemInitialColumns> subproblems_initial_columns_;
 
    const char *pricer_name_;
    const char *pricer_desc_;
