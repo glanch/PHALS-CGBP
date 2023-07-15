@@ -527,10 +527,12 @@ void CompactModel::SetSCIPParameters()
  * @note This function solves the compact model using SCIPsolve. It prints a message to the console indicating that it
  * is starting to solve the compact model.
  */
-void CompactModel::Solve()
+void CompactModel::Solve(double time_limit = 1e+20)
 {
    cout << "___________________________________________________________________________________________\n";
    cout << "start Solving compact Model: \n";
+   SCIPsetRealParam(scip_, "limits/time", time_limit);    // default 1e+20 s
+
    SCIPsolve(scip_);
 };
 

@@ -14,12 +14,15 @@ int main(int argc, char *argv[])
     // read instance
     instance->read(instance_path);
 
+    // if a parameter is passed, this is used as time limit in seconds, else default time limit is used
+    auto time_limit = argc >= 3 ? stod(argv[2]) : Settings::kDefaultTimeLimit;
+
     // create compact model
     auto compact_model = make_unique<CompactModel>(instance);
 
     // solve and display solution
-    // compact_model->Solve();
-    // compact_model->DisplaySolution();
+    compact_model->Solve(time_limit);
+    compact_model->DisplaySolution();
     
     // create master problem
     auto master_problem = make_shared<Master>(instance);
@@ -40,8 +43,7 @@ int main(int argc, char *argv[])
     // activate pricer
     SCIPactivatePricer(master_problem->scipRMP_, SCIPfindPricer(master_problem->scipRMP_, pricer->pricer_name_));
 
-    // if a parameter is passed, this is used as time limit in seconds, else default_instance is used
-    auto time_limit = argc >= 3 ? stod(argv[2]) : Settings::kDefaultMasterTimeLimit;
+    
     master_problem->Solve(time_limit);
     master_problem->DisplaySolution();
 }

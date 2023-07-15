@@ -22,7 +22,7 @@ public:
    ~CompactModel();
 
    // solve the problem
-   void Solve();
+   void Solve(double time_limit);
 
    // display the solution
    void DisplaySolution();
