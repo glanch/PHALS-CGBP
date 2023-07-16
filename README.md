@@ -19,12 +19,19 @@
 
 |Entscheidungsparameter                               |                                                         |
 | --------------------------------------------------- | ------------------------------------------------------- |
-| $x^k_{p,ijmn}$                            	      |  1, wenn Coil i in Modus m direkt vor Coil j in Modus n auf der Linie k produziert wird, 0 sonst |
-| $\lambda^k_p$                                        |
-| $Z_{i} \in \{0,1\}$                                 | 1, wenn Coil i Verspätung hat, 0 sonst                  |
-| $z^k_{i} \in \{0,1\}$                                 
-| $S_i \geq 0$                                        | Startzeit der Bearbeitung von Coil i                    |
+| $X_{p,ijmn}$                            	      |  1, wenn Coil i in Modus m direkt vor Coil j in Modus n auf der Linie k produziert wird, 0 sonst |
+| $x^k_{p,ijmn}$                            	      |  $X_{p,ijmn}$ je Fertigungslinie im Master             |
+| $\lambda^k_p$                                       | 1, wenn Muster ausgewählt				|
+| $Z_{ik} \in \{0,1\}$                                 | 1, wenn Coil i Verspätung hat, 0 sonst                  |
+| $z^k_{i} \in \{0,1\}$                               |  $Z_{i} \in \{0,1\}$  je Fertigungslinie im Master                                                 |                                
+| $S_{ik} \geq 0$                                        | Startzeit der Bearbeitung von Coil i                    |
 
+|Reduzierte Kosten                              |                                                         |
+|$\pi^{\alpha}$                                 |                                                    |
+|$\pi^{Z_{ik}_\text{orig}\right]$                                 |                                                    |
+|$\pi^{i_\text{part}\right]$                                 |                                                    |
+|$\pi^{X_{ijkmn}_\text{orig}\right]$                                 |                                                    |
+|$\pi^{k_\text{conv}\right]$                                 |                                                    |
 ## Master
 ![alt text](./pictures/master1.png)
 
