@@ -20,7 +20,7 @@
 |Entscheidungsparameter                               |                                                         |
 | --------------------------------------------------- | ------------------------------------------------------- |
 | $x^k_{p,ijmn}$                            	      |  1, wenn Coil i in Modus m direkt vor Coil j in Modus n auf der Linie k produziert wird, 0 sonst |
-| $lambda^k_p$                                        |
+| $\lambda^k_p$                                        |
 | $Z_{i} \in \{0,1\}$                                 | 1, wenn Coil i Verspätung hat, 0 sonst                  |
 | $z^k_{i} \in \{0,1\}$                                 
 | $S_i \geq 0$                                        | Startzeit der Bearbeitung von Coil i                    |
