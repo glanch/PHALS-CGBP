@@ -26,10 +26,31 @@
 ## Master
 
 		
-unter \ den \ Nebenbedingungen:\\
-\includegraphics[width\textwidth]{master1.png}		
-\includegraphics[width\textwidth]{master2.png}
+unter den Nebenbedingungen:
+\begin{align}
+    S_{ik} + 
+        \sum_{j \in \setCoilsEnd} 
+        \sum_{m \in \setModes{i}{k}}
+        \sum_{n \in \setModes{j}{k}}
+            \processingt{i}{k}{m} \cdot \dX{i}{j}{k}{m}{n}
+        \leq \due{i} + Z_{ik}\cdot M
+                                            && \forall i \in \setCoils, k \in \setLines
+\end{align}
+
+
+\begin{align}
+    S_{ik} &+ 
+        \sum_{m \in \setModes{i}{k}}
+        \sum_{n \in \setModes{j}{k}}
+            (\processingt{i}{k}{m} + \setupt{i}{j}{k}{m}{n}) \cdot \dX{i}{j}{k}{m}{n} \nonumber \\ 
+        &\leq S_{ik}+ M\cdot \left(1- 
+                                \sum_{m \in \setModes{i}{k}}
+                                \sum_{n \in \setModes{j}{k}}
+                                \dX{i}{j}{k}{m}{n}
+                            \right)
+                            &&\forall i, j \in \setCoils, k \in \setLines
+\end{align}
 
 ## Pricer
 
-unter den Nebenbedingungen:\\
+unter den Nebenbedingungen:
