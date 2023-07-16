@@ -28,7 +28,7 @@
 
 |Dual Variablen                             |                                                         |
 | --------------------------------------------------- | ------------------------------------------------------- |
-|$\pi_{\alpha}$                                 | Dual $\Alpha$ Beschränkung                                                   |
+|$\pi_{\alpha}$                                 | Dual $\alpha$ Beschränkung                                                   |
 |$\pi^{Z_{ik}}_\text{orig}$                                 | Dual Z Grundbediengung                                                 |
 |$\pi^{i}_\text{part}$                                 |  Dual  Muster                                                |
 |$\pi^{X_{ijkmn}}_\text{orig}$                                 | Dual X Grundbediengung                                                   |
