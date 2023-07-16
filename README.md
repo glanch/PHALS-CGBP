@@ -27,6 +27,7 @@
 | $S_{ik} \geq 0$                                        | Startzeit der Bearbeitung von Coil i                    |
 
 |Reduzierte Kosten                              |                                                         |
+| --------------------------------------------------- | ------------------------------------------------------- |
 |$\pi^{\alpha}$                                 |                                                    |
 |$\pi^{Z_{ik}_\text{orig}\right]$                                 |                                                    |
 |$\pi^{i_\text{part}\right]$                                 |                                                    |
