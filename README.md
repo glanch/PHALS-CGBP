@@ -19,12 +19,14 @@
 
 |Entscheidungsparameter                               |                                                         |
 | --------------------------------------------------- | ------------------------------------------------------- |
-| $X_{ijkmn} \in \{0,1\}$                             |  1, wenn Coil i in Modus m direkt vor Coil j in Modus n auf der Linie k produziert wird, 0 sonst |
+| $x^k_{p,ijmn}$                            	      |  1, wenn Coil i in Modus m direkt vor Coil j in Modus n auf der Linie k produziert wird, 0 sonst |
+| $lambda^k_p$                                        |
 | $Z_{i} \in \{0,1\}$                                 | 1, wenn Coil i Verspätung hat, 0 sonst                  |
+| $z^k_{i} \in \{0,1\}$                                 
 | $S_i \geq 0$                                        | Startzeit der Bearbeitung von Coil i                    |
 
 ## Master
-![alt text](https://github.com/[username]/[reponame]/blob/[branch]/image.jpg?raw=true)
+![alt text](https://gitlab.uni-hannover.de/christopher.glanderluh/or-ii-final-project/-/blob/measurement/pictures/master1.png)
 
 ## Pricer
-
+![alt text](https://gitlab.uni-hannover.de/christopher.glanderluh/or-ii-final-project/-/blob/measurement/pictures/pricer1.png)
