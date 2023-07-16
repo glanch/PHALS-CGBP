@@ -26,7 +26,7 @@
 | $S_i \geq 0$                                        | Startzeit der Bearbeitung von Coil i                    |
 
 ## Master
-![alt text](https://gitlab.uni-hannover.de/christopher.glanderluh/or-ii-final-project/-/blob/measurement/pictures/master1.png)
+![alt text](./pictures/master1.png)
 
 ## Pricer
-![alt text](https://gitlab.uni-hannover.de/christopher.glanderluh/or-ii-final-project/-/blob/measurement/pictures/pricer1.png)
+![alt text](./pictures/pricer1.png)
