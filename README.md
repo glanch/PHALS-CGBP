@@ -28,11 +28,11 @@
 
 |Reduzierte Kosten                              |                                                         |
 | --------------------------------------------------- | ------------------------------------------------------- |
-|$\pi^{\alpha}$                                 |                                                    |
-|$\pi^{Z_{ik}_\text{orig}\right]$                                 |                                                    |
-|$\pi^{i_\text{part}\right]$                                 |                                                    |
-|$\pi^{X_{ijkmn}_\text{orig}\right]$                                 |                                                    |
-|$\pi^{k_\text{conv}\right]$                                 |                                                    |
+|$\pi_{\alpha}$                                 |                                                    |
+|$\pi^{Z_{ik}}_\text{orig}\right]$                                 |                                                    |
+|$\pi^{i}_\text{part}\right]$                                 |                                                    |
+|$\pi^{X_{ijkmn}}_\text{orig}\right]$                                 |                                                    |
+|$\pi^{k}_\text{conv}\right]$                                 |                                                    |
 ## Master
 ![alt text](./pictures/master1.png)
 
