@@ -26,13 +26,13 @@
 | $z^k_{i} \in \{0,1\}$                               |  $Z_{i} \in \{0,1\}$  je Fertigungslinie im Master                                                 |                                
 | $S_{ik} \geq 0$                                        | Startzeit der Bearbeitung von Coil i                    |
 
-|Reduzierte Kosten                              |                                                         |
+|Dual Variablen                             |                                                         |
 | --------------------------------------------------- | ------------------------------------------------------- |
-|$\pi_{\alpha}$                                 |                                                    |
-|$\pi^{Z_{ik}}$                                 |                                                    |
-|$\pi^{i}_\text{part}$                                 |                                                    |
-|$\pi^{X_{ijkmn}}_\text{orig}\right$                                 |                                                    |
-|$\pi^{k}_\text{conv}\right$                                 |                                                    |
+|$\pi_{\alpha}$                                 | Dual $\Alpha$ Beschränkung                                                   |
+|$\pi^{Z_{ik}}_\text{orig}$                                 | Dual Z Grundbediengung                                                 |
+|$\pi^{i}_\text{part}$                                 |  Dual  Muster                                                |
+|$\pi^{X_{ijkmn}}_\text{orig}$                                 | Dual X Grundbediengung                                                   |
+|$\pi^{k}_\text{conv}$                                 |  Dual Convexification                                                  |
 ## Master
 ![alt text](./pictures/master1.png)
 
