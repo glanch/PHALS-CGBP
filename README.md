@@ -23,19 +23,19 @@
 |Entscheidungsparameter                               |                                                         |
 | --------------------------------------------------- | ------------------------------------------------------- |
 | $X_{p,ijmn}$                            	      |  1, wenn Coil i in Modus m direkt vor Coil j in Modus n auf der Linie k produziert wird, 0 sonst |
-| $x^k_{p,ijmn}$                            	      |  $X_{p,ijmn}$ je Fertigungslinie im Master             |
+| $x^k_{p,ijmn}$                            	      |  Koeffizient, der Belegung von $X_{ijkmn}$ in Pricing-Problem von Linie $k$ in Extrempunkt $p$ angibt              |
 | $\lambda^k_p$                                       | 1, wenn Muster ausgewählt				|
 | $Z_{ik} \in \{0,1\}$                                 | 1, wenn Coil i Verspätung hat, 0 sonst                  |
-| $z^k_{i} \in \{0,1\}$                               |  $Z_{i} \in \{0,1\}$  je Fertigungslinie im Master                                                 |                                
+| $z^k_{i} \in \{0,1\}$                               |  Koeffizient, der Belegung von $Z_{ik}$ in Pricing-Problem von Linie $k$ in Extrempunkt $p$ angibt                                                 |                                
 | $S_{ik} \geq 0$                                        | Startzeit der Bearbeitung von Coil i                    |
 
 |Dual Variablen                             |                                                         |
 | --------------------------------------------------- | ------------------------------------------------------- |
-|$\pi_{\alpha}$                                 | Dual $\alpha$ Beschränkung                                                   |
-|$\pi^{Z_{ik}}_\text{orig}$                                 | Dual Z Grundbediengung                                                 |
-|$\pi^{i}_\text{part}$                                 |  Dual  Muster                                                |
-|$\pi^{X_{ijkmn}}_\text{orig}$                                 | Dual X Grundbediengung                                                   |
-|$\pi^{k}_\text{conv}$                                 |  Dual Convexification                                                  |
+|$\pi_{\alpha}$                                 | Dual Anzahl Verspätungen $\alpha$ Beschränkung                                                   |
+|$\pi^{Z_{ik}}_\text{orig}$                                 | Dual Originalvariable Rekonstruktion $Z_{ik}$                                                 |
+|$\pi^{i}_\text{part}$                                 |  Dual Coil-Mode-Partitionierung pro Coil $i$                                                |
+|$\pi^{X_{ijkmn}}_\text{orig}$                                 | Dual X Originalvariable Rekonstruktion $X_{ijkmn}$                                                 |
+|$\pi^{k}_\text{conv}$                                 |  Dual Convexification pro Pricing-Problem / Produktionslinie $k$                                                 |
 ## Master
 ![alt text](./pictures/master1.png)
 
