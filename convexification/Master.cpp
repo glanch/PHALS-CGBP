@@ -381,7 +381,7 @@ Master::Master(shared_ptr<Instance> instance) : instance_(instance), initial_col
    }
 
    // generate a file to show the LP-Program that is build. "FALSE" = we get our specific choosen names.
-   SCIPwriteOrigProblem(scipRMP_, "original_RMP_bpp.lp", "lp", FALSE);
+   SCIPwriteOrigProblem(scipRMP_, "original_RMP_PHALS.lp", "lp", FALSE);
 
    // create timer for measuring
    SCIPcreateClock(scipRMP_, &master_round_clock);

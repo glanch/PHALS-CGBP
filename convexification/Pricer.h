@@ -21,7 +21,7 @@ using namespace std;
 using namespace scip;
 
 /**
- * @brief a class to store all informations for the pricer to solve the BPP with column generation
+ * @brief a class to store all informations for the pricer to solve the PHALS with column generation
  *
  * @note  a class called MyPricer which is a derived class from another class called ObjPricer.
  *

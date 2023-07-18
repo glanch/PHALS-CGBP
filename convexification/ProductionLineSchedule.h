@@ -1,6 +1,6 @@
 #pragma once
 #include <scip/scip_general.h>
-//Struktur for every Productionline
+// Struct capturing a production line schedule for a given line
 struct ProductionLineSchedule {
     SCIP_Real reduced_cost = 0;
     bool reduced_cost_negative = false;

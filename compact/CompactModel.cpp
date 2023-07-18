@@ -59,6 +59,10 @@ void CompactModel::CreateSVariable(Coil coil_i)
    SCIPaddVar(scip_, *s_var_pointer);
 }
 
+/**
+    Creates and adds a X variable for the specified coils, modes and production lines
+
+    */
 void CompactModel::CreateXVariable(Coil coil_i, Coil coil_j, ProductionLine line, Mode mode_i, Mode mode_j)
 {
    // bounds of variable: if coil_i = coil_j, variable should be equal to 0, else binary, i.e. 0 <= var <= 0
@@ -89,8 +93,8 @@ void CompactModel::CreateXVariable(Coil coil_i, Coil coil_j, ProductionLine line
  * @param instance pointer to problem-instance
  *
  * @note This code is a constructor for the CompactModel class. It creates a SCIP environment and sets the specific
- * parameters. It then creates and adds all variables to the model, including binary variables X_ijkmn, Z_i and Z_i for items i,
- * bins j. Finally, it adds all restrictions to the model and writes the final LP-model into a file.
+ * parameters. It then creates and adds all variables to the model, including binary variables X_ijkmn, Z_i and S_i
+ * Finally, it adds all restrictions to the model and writes the final LP-model into a file.
  */
 CompactModel::CompactModel(shared_ptr<Instance> instance) : instance_(instance)
 {
@@ -137,9 +141,6 @@ CompactModel::CompactModel(shared_ptr<Instance> instance) : instance_(instance)
             {
                continue;
             }
-            // if (coil_i != coil_j)
-            // {
-            // TODO: check this!
             auto &modes_i = instance_->modes[make_tuple(coil_i, line)];
             auto &modes_j = instance_->modes[make_tuple(coil_j, line)];
 
@@ -150,11 +151,10 @@ CompactModel::CompactModel(shared_ptr<Instance> instance) : instance_(instance)
                   CreateXVariable(coil_i, coil_j, line, mode_i, mode_j);
                }
             }
-            // }
          }
       }
    }
-
+   // Create S and Z variable
    for (auto &coil : instance_->coils)
    {
       this->CreateZVariable(coil);
@@ -264,6 +264,7 @@ CompactModel::CompactModel(shared_ptr<Instance> instance) : instance_(instance)
    }
 
    // (5) flow conservation: for every line, every coil, and every corresponding mode there is equal amount of incoming and outgoing edges
+   // see README
    for (auto &line : instance_->productionLines)
    {
       // skip sentinel coils, only regular coils
@@ -317,6 +318,10 @@ CompactModel::CompactModel(shared_ptr<Instance> instance) : instance_(instance)
 
    // (6) delay linking: link Z_i, S_i and X_..
    // skip non-regular coils
+   // constraint is equivalent to
+   // for all regular coils i:
+   // -infty <= S_i + sum(line k, non-starting coil_j, mode m of coil i on line k, mode n of coil j on line k) X_ijkmn*p_ikm
+   //            - due_i - M*Z_i <= 0
    for (auto &coil_i : instance_->regularCoils)
    {
       SCIPsnprintf(var_cons_name, Settings::kSCIPMaxStringLength, "delay_linking_C%d", coil_i);
@@ -365,6 +370,9 @@ CompactModel::CompactModel(shared_ptr<Instance> instance) : instance_(instance)
 
    // (7) start time linking: link S_i and X_..
    // skip non-regular coils for both coil_i and coil_j
+   // is equivalent to 
+   // for all regulra coils i and j: 
+   // -infty <= S_i - S_j - M + sum(line k, mode m of coil i on line k, mode n of coil j on line k, (p_ikm + t_ijkmn + M)*X_ijkmn)
    for (auto &coil_i : instance_->regularCoils)
    {
       for (auto &coil_j : instance_->regularCoils)
@@ -417,6 +425,7 @@ CompactModel::CompactModel(shared_ptr<Instance> instance) : instance_(instance)
    }
 
    // (8) max number of delayed columns
+   // no equivalence transformation needed, see README
    SCIPsnprintf(var_cons_name, Settings::kSCIPMaxStringLength, "max_delayed_coils");
 
    SCIPcreateConsBasicLinear(scip_,                           // scip
@@ -440,16 +449,7 @@ CompactModel::CompactModel(shared_ptr<Instance> instance) : instance_(instance)
 }
 
 /**
- * @brief Destroy the Compact Model:: Compact Model object
- *
- * @note This is the destructor for the Compact Model class. It releases all constraints and variables associated with
- * the model, and then releases the SCIP object. It releases all unique-item-assignment constraints and all
- * capacity-and-linking constraints. It also releases all
- * X_ij -variables and Y_i -variables Finally it frees the SCIP object.
- * If you get a:
-// "WARNING: Original variable <> not released when freeing SCIP problem <>"
-// this is the place to look and check every constraint and variable (yes, also the constraints, it leads to the same
-// warning).
+ * @brief Destroy the Compact Model:: Compact Model object and free all SCIP objects
  */
 CompactModel::~CompactModel()
 {
@@ -506,12 +506,8 @@ CompactModel::~CompactModel()
 }
 
 /**
- * @brief set optional SCIP parameters
+ * @brief Set optional SCIP parameters
  *
- * @note This function sets optional SCIP parameters for the CompactModel object. The parameters that are set are
- * "limits/time" to 1e+20 seconds, "limits/gap" to 0, "display/verblevel" to 4, and "display/lpinfo" to FALSE. For more
- * information on these parameters, please refer to the SCIP documentation at
- * https://www.scipopt.org/doc/html/PARAMETERS.php.
  */
 void CompactModel::SetSCIPParameters()
 {
@@ -536,14 +532,21 @@ void CompactModel::Solve(double time_limit = 1e+20)
    SCIPsolve(scip_);
 };
 
-/**
- * @brief Display every Value of the variables in the optimal solution
- *
- * @note This function displays every value of the variables in the optimal solution of a CompactModel object. It takes
- * no parameters and returns nothing. It uses the SCIPprintBestSol() function from the SCIP library to print out the
- * values.
- */
 
+
+/**
+ * @brief Given an optimal SCIP solution, finds the successor coil of coil i on
+ * line k
+ *
+ * @param solution SCIP solution on which the successor coil should be searched
+ * for
+ * @param coil_i 
+ * @param line 
+ * @return tuple<bool, Coil, Mode, Mode> First entry of tuple specifies if
+ * sucessor coil was found. If yes, the second entry specifies successor coil j
+ * of coil i. The third entry then specifies the mode of coil i. The fourth
+ * entry specifies the mode of successor coil j.
+ */
 tuple<bool, Coil, Mode, Mode> CompactModel::FindSucessorCoil(SCIP_Sol *solution, Coil coil_i, ProductionLine line)
 {
    for (auto &mode_i : instance_->modes[make_tuple(coil_i, line)])
@@ -570,6 +573,15 @@ tuple<bool, Coil, Mode, Mode> CompactModel::FindSucessorCoil(SCIP_Sol *solution,
 
    return make_tuple(false, 0, 0, 0);
 }
+
+/**
+ * @brief Display every Value of the variables in the optimal solution and reconstruct a schedule for every line
+ *
+ * @note This function displays every value of the variables in the optimal solution of a CompactModel object. It takes
+ * no parameters and returns nothing. It uses the SCIPprintBestSol() function from the SCIP library to print out the
+ * values.
+ */
+
 void CompactModel::DisplaySolution()
 {
    SCIPprintBestSol(scip_, NULL, FALSE);

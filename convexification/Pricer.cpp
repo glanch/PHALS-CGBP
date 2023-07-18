@@ -14,12 +14,16 @@ using namespace std;
 using namespace scip;
 
 template <typename Map>
+// Helper function for comparing maps
 bool map_compare(Map const &lhs, Map const &rhs)
 {
   // No predicate needed because there is operator== for pairs already.
   return lhs.size() == rhs.size() && std::equal(lhs.begin(), lhs.end(),
                                                 rhs.begin());
 }
+/**
+ * @brief Checks if a solution is already present in the master problem, i.e. if it was already generated 
+*/
 bool MyPricer::CheckSolutionAlreadyPresent(ProductionLine &line, shared_ptr<ProductionLineSchedule> &solution)
 {
   for (auto &existing_schedule : master_problem_->schedules_[line])
@@ -33,6 +37,9 @@ bool MyPricer::CheckSolutionAlreadyPresent(ProductionLine &line, shared_ptr<Prod
   return false;
 }
 
+/**
+ * @brief Constructs the pricer. Initializes dual values pointer and initialize every subproblem
+*/
 MyPricer::MyPricer(shared_ptr<Master> master_problem, const char *pricer_name, const char *pricer_desc, int pricer_priority, SCIP_Bool pricer_delay)
     : ObjPricer(master_problem->scipRMP_, pricer_name, pricer_desc, pricer_priority, pricer_delay), // TRUE : LP is re-optimized each time a variable is added
       pricer_name_(pricer_name), pricer_desc_(pricer_desc), master_problem_(master_problem), scipRMP_(master_problem->scipRMP_), instance_(master_problem->instance_)
@@ -46,6 +53,9 @@ MyPricer::MyPricer(shared_ptr<Master> master_problem, const char *pricer_name, c
     this->subproblems_[line].Setup(instance_, line);
   }
 }
+/**
+  * @brief Print the current master bounds and stop master scip clock to capture elapsed time until method call
+*/
 void MyPricer::PrintMasterBoundsAndMeasure(bool is_farkas)
 {
   master_problem_->MeasureTime(is_farkas ? "Before Farkas Pricing" : "Before RedCost");
@@ -157,6 +167,9 @@ SCIP_RETCODE MyPricer::scip_init(SCIP *scip, SCIP_PRICER *pricer)
   return SCIP_OKAY;
 }
 
+/**
+ * @brief Solves a subproblem for a given line. Performs heuristic if enabled,
+*/
 SCIP_RESULT MyPricer::SolveSubProblem(ProductionLine line, SubProblem &subproblem, bool is_farkas, vector<shared_ptr<ProductionLineSchedule>> solutions, condition_variable &search_terminated, bool &termination_flag)
 {
   // run exact pricing if needed
@@ -595,7 +608,7 @@ SCIP_RETCODE MyPricer::scip_redcost(SCIP *scip,
 }
 
 /**
- * @brief perform farkas-pricing
+ * @brief perform farkas-pricing or generate trivial initial artificial columns
  *
  * @param scip  an instance of the SCIP solver
  * @param pricer an instance of the SCIP pricer
@@ -711,18 +724,9 @@ SCIP_RETCODE MyPricer::scip_farkas(SCIP *scip, SCIP_PRICER *pricer, SCIP_RESULT 
 }
 
 /**
- * @brief add a new variable (a new possible pattern for a bin) to the master problem.
+ * @brief add a new variable (a new possible production schedule of a line) to the master problem.
  *
- * @param solution a pointer to a solution of the subproblem
- *
- * @note  a function addNewVar in the MyPricer class that adds a new variable to the SCIP optimization model. The
- * variable represents a packing pattern of a bin and is added to the master problem. The function creates a new
- * variable and assigns a unique name to it. It then sets the lower and upper bounds of the variable and its objective
- * value in the model. The function adds the newly created variable as a priced variable to the SCIP optimization model.
- * The function then adds coefficients to the one (non-dummy) constraint in the model: onePatternPerItem. It
- * iterates through each item and adds the corresponding coefficient in the onePatternPerItem constraint. The newly
- * created variable is also added to a list of lambdas in the _pbMaster object. Finally, the function writes the updated
- * optimization model to a file for inspection.
+ * @param solution a pointer to a production schedule
  */
 void MyPricer::AddNewVar(shared_ptr<ProductionLineSchedule> schedule)
 {
@@ -820,12 +824,8 @@ void MyPricer::AddNewVar(shared_ptr<ProductionLineSchedule> schedule)
   (void)SCIPsnprintf(model_name, Settings::kSCIPMaxStringLength, "TransMasterProblems/TransMaster_%d_%d.lp", schedule->line, lambda_index);
   SCIPwriteTransProblem(scipRMP_, model_name, "lp", FALSE);
 }
-/** @brief
- * @param solution The solution that should be printed
- * @note print the results of a calculation to the console. It takes the solution of SubProblem::solve() and prints it
- * to the console, along with some additional text. The function prints the reduced
- * and newly generated packing pattern costs. It then iterates through the PatternIncidence boolean vector and prints the
- * indices where the value is true, thus displaying whether an item is part of the new pattern.
+/** @brief Displays a found production schedule
+ * @param column The schedule that should be printed
  */
 void MyPricer::DisplaySchedule(shared_ptr<ProductionLineSchedule> column)
 {
@@ -852,11 +852,16 @@ void MyPricer::DisplaySchedule(shared_ptr<ProductionLineSchedule> column)
 
   cout << endl;
 }
-
+/**
+ * @brief Starts Master Problem SCIP clock 
+**/
 void MyPricer::StartMeasurePricingRound(bool is_farkas)
 {
   master_problem_->RestartTimer();
 }
+/** 
+  @brief Stops Master Problem SCIP clock and log measurement
+*/
 void MyPricer::StopMeasurePricingRound(bool is_farkas)
 {
   master_problem_->MeasureTime(std::string(is_farkas ? "Farkas" : "RedCost") + std::string(" Pricing Round") + std::to_string(is_farkas ? farkas_iteration_ : redcost_iteration_));

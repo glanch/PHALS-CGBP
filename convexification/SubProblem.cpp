@@ -2,26 +2,49 @@
 #include <memory>
 #include <scip/scip.h>
 #include <scip/scipdefplugins.h>
-
+/**
+ * @brief Sets the gap of the subproblem
+ * 
+ * @param gap The gap to be set
+ */
 void SubProblem::SetGap(double gap)
 {
   gap_ = gap;
   SCIPsetRealParam(scipSP_, "limits/gap", gap_); // default 0
 }
 
+/**
+ * @brief Sets time limit of the solution process
+ * 
+ * @param time_limit The time limit to be set
+ */
 void SubProblem::SetTimeLimit(double time_limit)
 {
   SCIPsetRealParam(scipSP_, "limits/time", time_limit); // default 0
 }
 
+/**
+ * @brief Resets time limit of the solution process to default value of 1+e20
+ * 
+ */
 void SubProblem::ResetTimeLimit()
 {
   SCIPsetRealParam(scipSP_, "limits/time", 1e+20); // default 1e+20 s
 }
+/**
+ * @brief Resets dynamic gap of the solution process to default value from Settings
+ * 
+ */
 void SubProblem::ResetDynamicGap()
 {
   dynamic_gap_ = Settings::kDynamicGap;
 }
+
+/**
+ * @brief Create a binary Z_i variable
+ * 
+ * @param coil_i The coil i that the Z_i variable is created for
+ */
 void SubProblem::CreateZVariable(Coil coil_i)
 {
   assert(vars_Z_.count(coil_i) == 0);
@@ -44,6 +67,11 @@ void SubProblem::CreateZVariable(Coil coil_i)
   SCIPaddVar(scipSP_, *z_var_pointer);
 }
 
+/**
+ * @brief Create a  binary S_i variable
+ * 
+ * @param coil_i The coil i that the S_i variable is created for
+ */
 void SubProblem::CreateSVariable(Coil coil_i)
 {
   assert(vars_S_.count(coil_i) == 0);
@@ -68,6 +96,16 @@ void SubProblem::CreateSVariable(Coil coil_i)
 
   SCIPaddVar(scipSP_, *s_var_pointer);
 }
+
+/**
+ * @brief Create a original binary X_ijkmn variable
+ * 
+ * @param coil_i Coil i this variable is created for
+ * @param coil_j Coil j this variable is created for
+ * @param line Production line this variable is created for
+ * @param mode_i Mode m of coil i this variable is created for
+ * @param mode_j Mode n of coil j this variable is created for
+ */
 void SubProblem::CreateXVariable(Coil coil_i, Coil coil_j, ProductionLine line, Mode mode_i, Mode mode_j)
 {
   // bounds of variable: if coil_i = coil_j, variable should be equal to 0, else binary, i.e. 0 <= var <= 0
@@ -92,19 +130,33 @@ void SubProblem::CreateXVariable(Coil coil_i, Coil coil_j, ProductionLine line, 
   SCIPaddVar(scipSP_, *x_var_pointer);
 }
 
+/**
+ * @brief Checks if solution process of SCIP object was interrupted
+ * 
+ * @return true If solution process was interrupted
+ * @return false If solution process was not interrupted
+ */
 bool SubProblem::WasInterrupted()
 {
   return SCIPisSolveInterrupted(scipSP_);
 }
+/**
+ * @brief Interrupts solution process of SCIP object
+ * 
+ */
 void SubProblem::InterruptSolving()
 {
   SCIPinterruptSolve(scipSP_);
 }
 
-SubProblem::SubProblem()
-{
-}
+
 // Do the work in Setup method instead of parameterless constructor
+/**
+ * @brief Setup the subproblem. Create SCIP object, set parameters, add variables, add constraints. 
+ * 
+ * @param instance The instance that is to be solved
+ * @param line Production line of the subproblem
+ */
 void SubProblem::Setup(shared_ptr<Instance> instance, ProductionLine line)
 {
   instance_ = instance;
@@ -119,6 +171,7 @@ void SubProblem::Setup(shared_ptr<Instance> instance, ProductionLine line)
   SCIPsetBoolParam(scipSP_, "display/lpinfo", FALSE);
   SCIPsetRealParam(scipSP_, "limits/time", 1e+20); // default 1e+20 s
   SCIPsetRealParam(scipSP_, "limits/gap", 0);      // default 0
+  // instruct SCIP to collect incumbents
   SCIPsetBoolParam(scipSP_, "constraints/countsols/collect", TRUE);
   // we do not care about solutions, if these have a not negative optimal objfunc-value
   SCIPsetObjlimit(scipSP_, -SCIPepsilon(scipSP_));
@@ -154,9 +207,7 @@ void SubProblem::Setup(shared_ptr<Instance> instance, ProductionLine line)
       {
         continue;
       }
-      // if (coil_i != coil_j)
-      // {
-      // TODO: check this!
+
       auto &modes_i = instance_->modes[make_tuple(coil_i, line_)];
       auto &modes_j = instance_->modes[make_tuple(coil_j, line_)];
 
@@ -167,10 +218,9 @@ void SubProblem::Setup(shared_ptr<Instance> instance, ProductionLine line)
           CreateXVariable(coil_i, coil_j, line_, mode_i, mode_j);
         }
       }
-      // }
     }
   }
-
+  // create other variables for coils
   for (auto &coil : instance_->coils)
   {
     this->CreateZVariable(coil);
@@ -182,6 +232,8 @@ void SubProblem::Setup(shared_ptr<Instance> instance, ProductionLine line)
   // #####################################################################################################################
 
   // (3) production line start: every line (this) has exactly one successor of starting coil
+  // equivalent to 
+  // 1 <= sum(regular coil coil_j, mode_i of start coil, mode_j of coil_j, X_(start coil),line of subproblem,coil_j,mode_i,mode_j <= 1
   SCIPsnprintf(var_cons_name, Settings::kSCIPMaxStringLength, "production_line_start");
 
   SCIPcreateConsBasicLinear(scipSP_,                      // scip
@@ -210,6 +262,9 @@ void SubProblem::Setup(shared_ptr<Instance> instance, ProductionLine line)
   SCIPaddCons(scipSP_, cons_production_line_start_);
 
   // (4) production line end: every line has exactly one predecessor of end coil
+  // equivalent to 
+  // 1 <= sum(regular coil coil_i, mode_i of coil_i, mode_j of end coil, X_coil_i,line of subproblem,end coil,mode_i,mode_j <= 1
+ 
   SCIPsnprintf(var_cons_name, Settings::kSCIPMaxStringLength, "production_line_end");
 
   SCIPcreateConsBasicLinear(scipSP_,                    // scip
@@ -239,7 +294,7 @@ void SubProblem::Setup(shared_ptr<Instance> instance, ProductionLine line)
   SCIPaddCons(scipSP_, cons_production_line_end_);
 
   // (5) flow conservation: for every line, every coil, and every corresponding mode there is equal amount of incoming and outgoing edges
-
+  // see README
   // skip sentinel coils, only regular coils
   for (auto &coil_j : instance_->regularCoils)
   {
@@ -290,6 +345,7 @@ void SubProblem::Setup(shared_ptr<Instance> instance, ProductionLine line)
 
   // (6) delay linking: link Z_i, S_i and X_..
   // skip non-regular coils
+  // see compact model
   for (auto &coil_i : instance_->regularCoils)
   {
     SCIPsnprintf(var_cons_name, Settings::kSCIPMaxStringLength, "delay_linking_C%d", coil_i);
@@ -335,6 +391,7 @@ void SubProblem::Setup(shared_ptr<Instance> instance, ProductionLine line)
 
   // (7) start time linking: link S_i and X_..
   // skip non-regular coils for both coil_i and coil_j
+  // see compact model
   for (auto &coil_i : instance_->regularCoils)
   {
     for (auto &coil_j : instance_->regularCoils)
@@ -382,7 +439,8 @@ void SubProblem::Setup(shared_ptr<Instance> instance, ProductionLine line)
     }
   }
 
-  // // (8) max number of delayed columns
+  // (8) max number of delayed columns
+  // see README
   SCIPsnprintf(var_cons_name, Settings::kSCIPMaxStringLength, "max_delayed_coils");
 
   SCIPcreateConsBasicLinear(scipSP_,                         // scip
@@ -403,36 +461,40 @@ void SubProblem::Setup(shared_ptr<Instance> instance, ProductionLine line)
 
   // (TODO) delay linking: link sum(X_ijkmn) and Z_i, if Z_i is 1, at least one X_ijkmn must be 1
   // skip non-regular coils
-  for (auto &coil_i : instance_->regularCoils)
-  {
-    SCIPsnprintf(var_cons_name, Settings::kSCIPMaxStringLength, "cons_delay_edge_linking_%d", coil_i);
+  // for (auto &coil_i : instance_->regularCoils)
+  // {
+  //   SCIPsnprintf(var_cons_name, Settings::kSCIPMaxStringLength, "cons_delay_edge_linking_%d", coil_i);
 
-    SCIPcreateConsBasicLinear(scipSP_,                           // scip
-                              &cons_delay_edge_linking_[coil_i], // cons
-                              var_cons_name,                     // name
-                              0,                                 // nvar
-                              0,                                 // vars
-                              0,                                 // coeffs
-                              -SCIPinfinity(scipSP_),            // lhs
-                              0);                                // rhs
+  //   SCIPcreateConsBasicLinear(scipSP_,                           // scip
+  //                             &cons_delay_edge_linking_[coil_i], // cons
+  //                             var_cons_name,                     // name
+  //                             0,                                 // nvar
+  //                             0,                                 // vars
+  //                             0,                                 // coeffs
+  //                             -SCIPinfinity(scipSP_),            // lhs
+  //                             0);                                // rhs
 
-    // add coefficients
-    // add Z_i
-    SCIPaddCoefLinear(scipSP_, cons_delay_edge_linking_[coil_i], vars_Z_[coil_i], 1);
+  //   // add coefficients
+  //   // add Z_i
+  //   SCIPaddCoefLinear(scipSP_, cons_delay_edge_linking_[coil_i], vars_Z_[coil_i], 1);
 
-    // add <= sum(1*X_ijkmn) to constraint term
-    for (auto const &[tuple, var_X] : vars_X_)
-    {
-      if (get<0>(tuple) == coil_i)
-      {
-        // if this variable incorporates coil_i as start point, add it to constraint
-        SCIPaddCoefLinear(scipSP_, cons_delay_edge_linking_[coil_i], var_X, -1);
-      }
-    }
-    SCIPaddCons(scipSP_, cons_delay_edge_linking_[coil_i]);
-  }
+  //   // add <= sum(1*X_ijkmn) to constraint term
+  //   for (auto const &[tuple, var_X] : vars_X_)
+  //   {
+  //     if (get<0>(tuple) == coil_i)
+  //     {
+  //       // if this variable incorporates coil_i as start point, add it to constraint
+  //       SCIPaddCoefLinear(scipSP_, cons_delay_edge_linking_[coil_i], var_X, -1);
+  //     }
+  //   }
+  //   SCIPaddCons(scipSP_, cons_delay_edge_linking_[coil_i]);
+  // }
 }
 // destructor
+/**
+ * @brief Destroy the Sub Problem object and release SCIP ressources
+ * 
+ */
 SubProblem::~SubProblem()
 {
   SCIPreleaseCons(scipSP_, &cons_production_line_start_);
@@ -480,6 +542,12 @@ SubProblem::~SubProblem()
 }
 
 // update the objective-function of the Subproblem according to the new DualVariables with SCIPchgVarObj()
+/**
+ * @brief Updates the objective of the sub problem according to dual_values
+ * 
+ * @param dual_values Corresponding dual values: either Farkas multipliers or dual values of constraints of Master problem 
+ * @param is_farkas If false, costs of pattern is part of objective, else not part of objective 
+ */
 void SubProblem::UpdateObjective(shared_ptr<DualValues> dual_values, const bool is_farkas)
 {
   // if reoptimization is enabled, methods for freeing transformed problem and updating objective function are different
@@ -488,8 +556,7 @@ void SubProblem::UpdateObjective(shared_ptr<DualValues> dual_values, const bool 
   if(Settings::kEnableReoptimization) {
     SCIPfreeReoptSolve(scipSP_); 
   } else {
-
-  SCIPfreeTransform(scipSP_);
+    SCIPfreeTransform(scipSP_);
   }
 
   // collect all variables
@@ -510,11 +577,15 @@ void SubProblem::UpdateObjective(shared_ptr<DualValues> dual_values, const bool 
   // current index of both "arrays"
   int i = 0;
 
-  // Z variables
+  // loop through Z variables
   for (auto coil_i : instance_->coils)
   {
     // both delay coils constraint and original variable constraint duals need to be respected here
     // but only if coil_i is a regular coil, if not, don't consider dual of max delay constraint
+    // Z occurs in original variable constraint with coefficient -1, thus coefficient in objective is --(1) = 1
+    // coefficient: 
+    // if regular coil: -pi_max_delayed_coils_ + pi_original_var_Z
+    // if non-regular coil: pi_original_var_Z
     vars[i] = vars_Z_[coil_i];
     coeffs[i] = -(instance_->IsRegularCoil(coil_i) ? dual_values->pi_max_delayed_coils_ : 0) + dual_values->pi_original_var_Z[coil_i];
     i++;
@@ -522,7 +593,7 @@ void SubProblem::UpdateObjective(shared_ptr<DualValues> dual_values, const bool 
 
   // S variables don't occur in the MP, so no coefficients in reduced cost term
 
-  // X_ijkmn variables
+  // loop through every X_ijkmn variables
   for (auto &[tuple, var_X] : vars_X_)
   {
     // destructure
@@ -531,18 +602,22 @@ void SubProblem::UpdateObjective(shared_ptr<DualValues> dual_values, const bool 
     // this should always be the case, else, we have a problem
     assert(line == line_);
 
+    // calculate coefficient of variable:
+    // positive coefficient: original costs
     SCIP_Real column_cost = 0;
+
+    // negative coefficients: dual costs introduced by constraints in MP
     SCIP_Real dual_cost = 0;
-    SCIP_Real original_var_cost = -dual_values->pi_original_var_X[tuple];
+    // X_ijkmn variable occurs in original var constraint with coefficient -1, same argument as above
+    SCIP_Real original_var_cost = dual_values->pi_original_var_X[tuple];
 
     // skip rest of cost if coil_i is non-regular since such variables do not occur at objective nor at coil partitioning constraint, only at original variable restore constraint
     if (instance_->IsRegularCoil(coil_i))
     {
-
       // set dual cost because coil_i always occurs in coil partitioning constraint
-      dual_cost = dual_values->pi_partitioning_[coil_i];
+      dual_cost = -dual_values->pi_partitioning_[coil_i];
 
-      // don't add column cost if coil_j is end coil since end coil only occurs at coil partitioning constraint
+      // don't add column cost if coil_j is end coil since end coil only occurs at coil partitioning constraint and not in objective
       if (instance_->IsEndCoil(coil_j))
       {
         column_cost = 0;
@@ -558,7 +633,8 @@ void SubProblem::UpdateObjective(shared_ptr<DualValues> dual_values, const bool 
     }
 
     vars[i] = var_X;
-    coeffs[i] = column_cost - dual_cost - original_var_cost;
+    // capture whole coefficient
+    coeffs[i] = column_cost + dual_cost + original_var_cost;
     i++;
   }
 
@@ -581,11 +657,19 @@ void SubProblem::UpdateObjective(shared_ptr<DualValues> dual_values, const bool 
   }
 }
 
+/**
+ * @brief Trigger subproblem solving
+ * 
+ * @return vector<shared_ptr<ProductionLineSchedule>> Production Line schedules with negative reduced costs that were found 
+ */
 vector<shared_ptr<ProductionLineSchedule>> SubProblem::Solve()
 {
+  // capture schedules
   vector<shared_ptr<ProductionLineSchedule>> schedules;
+  
+  // set gap to specified dynamic gap
   this->SetGap(dynamic_gap_);
-
+  
   char model_name[Settings::kSCIPMaxStringLength];
   (void)SCIPsnprintf(model_name, Settings::kSCIPMaxStringLength, "SubProblems/SubProblem_L%d_%d.lp", line_, iteration_);
 
@@ -672,18 +756,32 @@ vector<shared_ptr<ProductionLineSchedule>> SubProblem::Solve()
       schedule->delayedness[coil_i] = coil_delayed;
     }
 
+    // add solution to list
     schedules.push_back(schedule);
   }
+
+  // increment iteration counter
   iteration_++;
 
   return schedules;
 }
 
+/**
+ * @brief Gets dual bound of subproblem
+ * 
+ * @return SCIP_Real Dual bound of subproblem
+ */
 SCIP_Real SubProblem::GetDualBound()
 {
   return SCIPgetDualbound(scipSP_);
 }
 
+/**
+ * @brief Checks if dual bound is negative
+ * 
+ * @return true Dual bound is negative
+ * @return false Dual bound is not negative
+ */
 bool SubProblem::IsDualBoundNegative()
 {
   return SCIPisNegative(scipSP_, GetDualBound());

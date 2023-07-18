@@ -22,6 +22,6 @@ namespace Settings
 
     constexpr double kDefaultTimeLimit = 1e+20;
     
-    constexpr bool kReconstructScheduleFromSolution = false;
-    constexpr bool kEnableReoptimization = true;
+    constexpr bool kReconstructScheduleFromSolution = true;
+    constexpr bool kEnableReoptimization = false;
 }

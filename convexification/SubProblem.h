@@ -8,7 +8,6 @@
 class SubProblem
 {
 public:
-    SubProblem();
     ~SubProblem();
     void Setup(shared_ptr<Instance> instance, ProductionLine line);
 
