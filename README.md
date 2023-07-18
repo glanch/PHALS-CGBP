@@ -5,6 +5,9 @@
 |Indizes und Mengen          |                                                                                  |
 | --------------------------------------------------- | ------------------------------------------------------- |
 |$i,j \ \ \in \mathcal{I}$                            | Menge der Coils                                         |       
+|$i,j \ \ \in \mathcal{I}_s$                          | Menge der Coils mit Startcoil                           |       
+|$i,j \ \ \in \mathcal{I}^e$                          | Menge der Coils mit Endcoil                             |       
+|$i,j \ \ \in \mathcal{I}_^e_s$                       | Menge der Coils mit Start- und Endcoil                  |       
 |$k \in \mathcal{K}$  				      | Menge der parallelen Linien                             |
 |$m \in \mathcal{M_{ik}},~n \in \mathcal{M_{jk}}$    | Menge der möglichen Modi für Coil i und j auf Linie k   |
 
