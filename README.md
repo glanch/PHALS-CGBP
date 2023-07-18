@@ -26,7 +26,7 @@
 | $x^k_{p,ijmn}$                            	      |  Koeffizient, der Belegung von $X_{ijkmn}$ in Pricing-Problem von Linie $k$ in Extrempunkt $p$ angibt              |
 | $\lambda^k_p$                                       | 1, wenn Muster ausgewählt				|
 | $Z_{ik} \in \{0,1\}$                                 | 1, wenn Coil i Verspätung hat, 0 sonst                  |
-| $z^k_{i} \in \{0,1\}$                               |  Koeffizient, der Belegung von $Z_{ik}$ in Pricing-Problem von Linie $k$ in Extrempunkt $p$ angibt                                                 |                                
+| $z^k_{p,i} \in \{0,1\}$                               |  Koeffizient, der Belegung von $Z_{ik}$ in Pricing-Problem von Linie $k$ in Extrempunkt $p$ angibt                                                 |                                
 | $S_{ik} \geq 0$                                        | Startzeit der Bearbeitung von Coil i                    |
 
 |Dual Variablen                             |                                                         |
@@ -36,8 +36,8 @@
 |$\pi^{i}_\text{part}$                                 |  Dual Coil-Mode-Partitionierung pro Coil $i$                                                |
 |$\pi^{X_{ijkmn}}_\text{orig}$                                 | Dual X Originalvariable Rekonstruktion $X_{ijkmn}$                                                 |
 |$\pi^{k}_\text{conv}$                                 |  Dual Convexification pro Pricing-Problem / Produktionslinie $k$                                                 |
-## Master
+## Master-Problem
 ![alt text](./pictures/master1.png)
-
-## Pricer
+## Pricing
+Pricing-Problem für Produktionslinie $k$
 ![alt text](./pictures/pricer1.png)
